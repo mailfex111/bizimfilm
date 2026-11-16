@@ -63,8 +63,8 @@ export default function Navbar({
     }
   }, [activeTab]);
 
-  const partner1Label = currentCouple?.partner1Name || "Ben";
-  const partner2Label = currentCouple?.partner2Name || "Sen";
+  const partner1Label = currentCouple?.partner1Name || "Emir";
+  const partner2Label = currentCouple?.partner2Name || "Hazal";
 
   const handleNavClick = (tab: NavTab) => {
     onSelectTab(tab);
@@ -252,22 +252,28 @@ export default function Navbar({
 
               {showCoupleSwitcher && (
                 <div className="my-1 rounded-lg bg-black/50 p-1.5 border border-rose-200/10 space-y-1">
-                  {(["cift1", "cift2", "cift3"] as CoupleId[]).map((cid) => (
+                  {(
+                    [
+                      { id: "cift1", names: "Emir & Hazal" },
+                      { id: "cift2", names: "Sümeyya & Berke" },
+                      { id: "cift3", names: "Gamze & Onur" },
+                    ] as { id: CoupleId; names: string }[]
+                  ).map((item) => (
                     <button
-                      key={cid}
+                      key={item.id}
                       type="button"
                       onClick={() => {
-                        void switchDemoCouple(cid);
+                        void switchDemoCouple(item.id);
                         setShowCoupleSwitcher(false);
                       }}
-                      className={`w-full rounded px-2 py-0.5 text-left text-[10px] flex items-center justify-between cursor-pointer ${
-                        currentCouple?.id === cid
+                      className={`w-full rounded px-2 py-1 text-left text-[10px] flex items-center justify-between cursor-pointer ${
+                        currentCouple?.id === item.id
                           ? "bg-[#c81e3a] text-white font-medium"
                           : "text-rose-100/75 hover:bg-white/10"
                       }`}
                     >
-                      <span>{cid.toUpperCase()}</span>
-                      {currentCouple?.id === cid && <span>Aktif</span>}
+                      <span>{item.names}</span>
+                      {currentCouple?.id === item.id && <span>Aktif</span>}
                     </button>
                   ))}
                 </div>

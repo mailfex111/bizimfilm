@@ -11,8 +11,8 @@ export const COUPLE_ACCOUNTS: Record<CoupleId, CoupleAccount> = {
   cift1: {
     id: "cift1",
     username: "cift1",
-    partner1Name: "Ben",
-    partner2Name: "Sen",
+    partner1Name: "Emir",
+    partner2Name: "Hazal",
     coupleTitle: "Bizim Hikayemiz",
     anniversaryDate: "14 Şubat 2024",
     avatar1: "/images/avatar-ben.webp",
@@ -24,27 +24,27 @@ export const COUPLE_ACCOUNTS: Record<CoupleId, CoupleAccount> = {
   cift2: {
     id: "cift2",
     username: "cift2",
-    partner1Name: "Deniz",
-    partner2Name: "Ece",
+    partner1Name: "Sümeyya",
+    partner2Name: "Berke",
     coupleTitle: "Bizim Hikayemiz",
     anniversaryDate: "21 Haziran 2023",
     avatar1: "/images/avatar-ben.webp",
     avatar2: "/images/avatar-sen.webp",
     songTitle: "Bizim Şarkımız",
-    songSubtitle: "Deniz & Ece Özel Listesi",
+    songSubtitle: "Sümeyya & Berke Özel Listesi",
     bookProgress: 64,
   },
   cift3: {
     id: "cift3",
     username: "cift3",
-    partner1Name: "Mert",
-    partner2Name: "Zeynep",
+    partner1Name: "Gamze",
+    partner2Name: "Onur",
     coupleTitle: "Bizim Hikayemiz",
     anniversaryDate: "09 Eylül 2024",
     avatar1: "/images/avatar-ben.webp",
     avatar2: "/images/avatar-sen.webp",
     songTitle: "Bizim Şarkımız",
-    songSubtitle: "Mert & Zeynep Özel Listesi",
+    songSubtitle: "Gamze & Onur Özel Listesi",
     bookProgress: 85,
   },
 };
@@ -56,7 +56,7 @@ export class BizimFilmCoupleDB extends Dexie {
 
   constructor(coupleId: CoupleId) {
     // Separate IndexedDB namespace per demo couple
-    super(`BizimFilmDB_${coupleId}`);
+    super(`BizimFilmDB_v2_${coupleId}`);
     this.version(1).stores({
       photos: "id, coupleId, createdAt, date",
       bookPages: "id, coupleId, order, updatedAt",
@@ -78,10 +78,10 @@ function getInitialSeedPhotos(coupleId: CoupleId): PhotoItem[] {
   const now = Date.now();
   const prefix =
     coupleId === "cift1"
-      ? ""
+      ? " (Emir & Hazal)"
       : coupleId === "cift2"
-      ? " (Deniz & Ece)"
-      : " (Mert & Zeynep)";
+      ? " (Sümeyya & Berke)"
+      : " (Gamze & Onur)";
 
   return [
     {
@@ -170,8 +170,8 @@ function getInitialSeedBookPages(coupleId: CoupleId): BookPageItem[] {
 
   const customNoteByCouple: Record<CoupleId, string> = {
     cift1: "Seninle her an daha güzel... ♡",
-    cift2: "Deniz & Ece — Seninle her an daha güzel... ♡",
-    cift3: "Mert & Zeynep — Seninle her an daha güzel... ♡",
+    cift2: "Sümeyya & Berke — Seninle her an daha güzel... ♡",
+    cift3: "Gamze & Onur — Seninle her an daha güzel... ♡",
   };
 
   return [

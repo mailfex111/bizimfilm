@@ -5,9 +5,9 @@ import { Heart, Lock, User, AlertCircle, Sparkles, ShieldAlert, Eye, EyeOff } fr
 import { useAuth } from "@/context/AuthContext";
 
 const DEMO_ACCOUNTS_LIST = [
-  { username: "cift1", label: "Çift 1 (Ben & Sen)", pass: "Demo1234!" },
-  { username: "cift2", label: "Çift 2 (Deniz & Ece)", pass: "Demo1234!" },
-  { username: "cift3", label: "Çift 3 (Mert & Zeynep)", pass: "Demo1234!" },
+  { username: "cift1", label: "Çift 1 (Emir & Hazal)", pass: "Demo1234!" },
+  { username: "cift2", label: "Çift 2 (Sümeyya & Berke)", pass: "Demo1234!" },
+  { username: "cift3", label: "Çift 3 (Gamze & Onur)", pass: "Demo1234!" },
 ];
 
 export default function LoginView() {
