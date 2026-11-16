@@ -11,6 +11,7 @@ import {
   Database,
 } from "lucide-react";
 import { exportCoupleBackup, importCoupleBackup } from "@/lib/backup";
+import { COUPLE_ACCOUNTS } from "@/lib/db";
 import { type CoupleId } from "@/types";
 
 interface SettingsBackupModalProps {
@@ -36,6 +37,11 @@ export default function SettingsBackupModal({
 
   if (!isOpen) return null;
 
+  const couple = COUPLE_ACCOUNTS[coupleId];
+  const coupleDisplayName = couple
+    ? `${couple.partner1Name} ve ${couple.partner2Name}`
+    : "Bizim Hikayemiz";
+
   const handleExport = async () => {
     setBusy(true);
     setErrorMessage(null);
@@ -43,7 +49,7 @@ export default function SettingsBackupModal({
     try {
       await exportCoupleBackup(coupleId);
       setStatusMessage(
-        `${coupleId.toUpperCase()} hesabına ait ${photosCount} fotoğraf ve ${pagesCount} kitap sayfası başarıyla dışa aktarıldı.`
+        `${coupleDisplayName} hesabına ait ${photosCount} fotoğraf ve ${pagesCount} kitap sayfası başarıyla dışa aktarıldı.`
       );
     } catch (err) {
       setErrorMessage(
@@ -90,7 +96,7 @@ export default function SettingsBackupModal({
           <div className="flex items-center gap-2.5">
             <Database className="h-5 w-5 text-[#f06c82]" />
             <h3 className="text-base sm:text-lg font-bold">
-              Hesap Ayarları ve Veri Yedekleme ({coupleId.toUpperCase()})
+              Hesap Ayarları — {coupleDisplayName}
             </h3>
           </div>
           <button
@@ -105,7 +111,7 @@ export default function SettingsBackupModal({
         {/* Storage Summary */}
         <div className="rounded-xl border border-rose-200/15 bg-[#15060a] p-4 mb-4">
           <div className="text-xs font-semibold text-rose-200 mb-1">
-            Aktif IndexedDB Veri Alanı: <code className="text-white">BizimFilmDB_{coupleId}</code>
+            Aktif Hesap: <span className="text-white">{coupleDisplayName} ♡</span>
           </div>
           <p className="text-xs text-rose-100/75">
             Kayıtlı Fotoğraf: <strong>{photosCount} adet</strong> • Anı Kitabı Sayfası:{" "}
@@ -113,14 +119,13 @@ export default function SettingsBackupModal({
           </p>
         </div>
 
-        {/* Browser Data Warning required by Prompt Section 7 */}
+        {/* Browser Data Notice */}
         <div className="rounded-xl border border-amber-400/25 bg-amber-950/30 p-3.5 mb-5 flex items-start gap-2.5 text-xs text-amber-100/90 leading-relaxed">
           <ShieldAlert className="h-4 w-4 text-amber-300 shrink-0 mt-0.5" />
           <div>
-            <strong>Önemli Veri Saklama Uyarısı:</strong> Bu demoda tüm fotoğraflar ve anı kitabı
-            sayfaları sunucu yerine tarayıcınızın <strong>IndexedDB</strong> veritabanında saklanır.
-            Tarayıcı geçmişini veya site verilerini temizlerseniz IndexedDB kayıtları silinebilir.
-            Verilerinizi korumak için aşağıdan yedek dosyası indirebilirsiniz.
+            <strong>Veri Yedekleme Bilgisi:</strong> Fotoğraflarınız ve anı kitabı sayfalarınız
+            tarayıcınızın yerel veritabanında saklanır. Tarayıcı geçmişini veya site verilerini
+            temizlerseniz kayıtlar silinebileceğinden aşağıdan yedek dosyası indirebilirsiniz.
           </div>
         </div>
 

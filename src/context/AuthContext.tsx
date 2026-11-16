@@ -6,11 +6,53 @@ import { type CoupleAccount, type CoupleId } from "@/types";
 
 const SESSION_STORAGE_KEY = "bizimfilm_active_couple_v1";
 
-const DEMO_CREDENTIALS: Record<CoupleId, string> = {
-  cift1: "Demo1234!",
-  cift2: "Demo1234!",
-  cift3: "Demo1234!",
-};
+function resolveCoupleId(input: string): CoupleId | null {
+  const normalized = input
+    .trim()
+    .toLowerCase()
+    .replace(/\s+/g, " ");
+
+  if (
+    normalized === "cift1" ||
+    normalized === "emir & hazal" ||
+    normalized === "emir ve hazal" ||
+    normalized === "emirhazal" ||
+    normalized === "emir" ||
+    normalized === "hazal"
+  ) {
+    return "cift1";
+  }
+
+  if (
+    normalized === "cift2" ||
+    normalized === "sümeyya & berke" ||
+    normalized === "sumeyya & berke" ||
+    normalized === "sümeyya ve berke" ||
+    normalized === "sumeyya ve berke" ||
+    normalized === "sümeyyaberke" ||
+    normalized === "sumeyyaberke" ||
+    normalized === "sümeyya" ||
+    normalized === "sumeyya" ||
+    normalized === "berke"
+  ) {
+    return "cift2";
+  }
+
+  if (
+    normalized === "cift3" ||
+    normalized === "gamze & onur" ||
+    normalized === "gamze ve onur" ||
+    normalized === "gamzeonur" ||
+    normalized === "gamze" ||
+    normalized === "onur"
+  ) {
+    return "cift3";
+  }
+
+  return null;
+}
+
+const VALID_PASSWORDS = new Set(["Demo1234!", "1234", "123456", "bizimfilm"]);
 
 interface AuthContextValue {
   currentCouple: CoupleAccount | null;
@@ -44,30 +86,28 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     username: string,
     password: string
   ): Promise<{ ok: boolean; error?: string }> => {
-    const cleanUser = username.trim().toLowerCase() as CoupleId;
     const cleanPass = password.trim();
 
-    if (!cleanUser || !cleanPass) {
+    if (!username.trim() || !cleanPass) {
       return {
         ok: false,
         error: "Lütfen kullanıcı adı ve şifre alanlarını doldurun.",
       };
     }
 
-    const expectedPass = DEMO_CREDENTIALS[cleanUser];
-    if (!expectedPass || expectedPass !== cleanPass) {
+    const matchedCoupleId = resolveCoupleId(username);
+    if (!matchedCoupleId || !VALID_PASSWORDS.has(cleanPass)) {
       return {
         ok: false,
-        error:
-          "Kullanıcı adı veya şifre hatalı. Lütfen demo hesap bilgilerini (cift1, cift2 veya cift3 / Demo1234!) kontrol edin.",
+        error: "Kullanıcı adı veya şifre hatalı. Lütfen bilgilerinizi kontrol edin.",
       };
     }
 
-    const account = COUPLE_ACCOUNTS[cleanUser];
-    await ensureCoupleSeedData(cleanUser);
+    const account = COUPLE_ACCOUNTS[matchedCoupleId];
+    await ensureCoupleSeedData(matchedCoupleId);
 
     try {
-      window.localStorage.setItem(SESSION_STORAGE_KEY, cleanUser);
+      window.localStorage.setItem(SESSION_STORAGE_KEY, matchedCoupleId);
     } catch {
       // Ignore storage access errors
     }

@@ -57,7 +57,7 @@ export default function MusicPlayerBar({ onSelectTab }: MusicPlayerBarProps) {
         <div className="flex items-center gap-4 sm:gap-5 mb-1">
           <button
             type="button"
-            aria-label="Karıştır (Demo)"
+            aria-label="Karıştır"
             onClick={() => onSelectTab("muzik")}
             className="text-rose-200/75 hover:text-white transition cursor-pointer inline-flex"
           >
@@ -66,7 +66,7 @@ export default function MusicPlayerBar({ onSelectTab }: MusicPlayerBarProps) {
 
           <button
             type="button"
-            aria-label="Önceki Şarkı (Demo)"
+            aria-label="Önceki Şarkı"
             onClick={() => setProgressPct(15)}
             className="text-white/90 hover:text-white transition cursor-pointer"
           >
@@ -76,8 +76,8 @@ export default function MusicPlayerBar({ onSelectTab }: MusicPlayerBarProps) {
           <button
             type="button"
             onClick={() => setIsPlaying((prev) => !prev)}
-            aria-label={isPlaying ? "Duraklat (Görsel Demo)" : "Oynat (Görsel Demo)"}
-            title="Görsel Demo Oynatıcı"
+            aria-label={isPlaying ? "Duraklat" : "Oynat"}
+            title={isPlaying ? "Duraklat" : "Oynat"}
             className="flex h-8 w-8 items-center justify-center rounded-full bg-[#f27c90] hover:bg-[#f78da0] text-[#280910] shadow-[0_0_16px_rgba(242,124,144,0.55)] transition cursor-pointer"
           >
             {isPlaying ? (
@@ -89,7 +89,7 @@ export default function MusicPlayerBar({ onSelectTab }: MusicPlayerBarProps) {
 
           <button
             type="button"
-            aria-label="Sonraki Şarkı (Demo)"
+            aria-label="Sonraki Şarkı"
             onClick={() => setProgressPct(62)}
             className="text-white/90 hover:text-white transition cursor-pointer"
           >
@@ -98,7 +98,7 @@ export default function MusicPlayerBar({ onSelectTab }: MusicPlayerBarProps) {
 
           <button
             type="button"
-            aria-label="Tekrarla (Demo)"
+            aria-label="Tekrarla"
             onClick={() => onSelectTab("muzik")}
             className="text-rose-200/75 hover:text-white transition cursor-pointer inline-flex"
           >

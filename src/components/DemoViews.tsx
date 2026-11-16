@@ -10,49 +10,15 @@ import {
   Play,
   Clock,
   Sparkles,
-  Info,
   Search,
   Bell,
   X,
   BookOpen,
   Image as ImageIcon,
   Download,
-  Upload,
 } from "lucide-react";
 import { useAuth } from "@/context/AuthContext";
 import { type BookPageItem, type NavTab, type PhotoItem } from "@/types";
-
-function DemoBanner({ featureName, onGoToWorking }: { featureName: string; onGoToWorking: (tab: NavTab) => void }) {
-  return (
-    <div className="mb-6 flex flex-col sm:flex-row sm:items-center justify-between gap-3 rounded-2xl border border-rose-300/20 bg-[#280c14]/90 p-4 text-xs text-rose-100/85">
-      <div className="flex items-start sm:items-center gap-2.5">
-        <Info className="h-4 w-4 text-[#f06c82] shrink-0 mt-0.5 sm:mt-0" />
-        <span>
-          <strong className="text-white">{featureName} — Gösterim Amaçlı Demo Bölümü:</strong> Bu
-          sayfa prototip kapsamında örnek içerikleri sergilemektedir. Gerçek veri yükleme ve
-          düzenleme için <strong>Anı Kitabı</strong> veya <strong>Fotoğraflar</strong> bölümünü
-          kullanabilirsiniz.
-        </span>
-      </div>
-      <div className="flex items-center gap-2 shrink-0">
-        <button
-          type="button"
-          onClick={() => onGoToWorking("ani-kitabi")}
-          className="rounded-lg bg-[#c81e3a] hover:bg-[#e02444] px-3 py-1.5 text-xs font-semibold text-white cursor-pointer"
-        >
-          Anı Kitabını Aç
-        </button>
-        <button
-          type="button"
-          onClick={() => onGoToWorking("fotograflar")}
-          className="rounded-lg border border-rose-200/20 bg-white/5 hover:bg-white/10 px-3 py-1.5 text-xs font-medium text-rose-100 cursor-pointer"
-        >
-          Fotoğraf Yükle
-        </button>
-      </div>
-    </div>
-  );
-}
 
 export function VideosDemoView({ onSelectTab }: { onSelectTab: (tab: NavTab) => void }) {
   const sampleVideos = [
@@ -108,21 +74,27 @@ export function VideosDemoView({ onSelectTab }: { onSelectTab: (tab: NavTab) => 
 
   return (
     <section className="mx-auto max-w-[1440px] px-4 sm:px-6 lg:px-10 py-6 pb-28">
-      <DemoBanner featureName="Videolarımız (12 Örnek Video Koleksiyonu)" onGoToWorking={onSelectTab} />
-
-      <div className="flex items-center justify-between mb-5">
+      <div className="flex flex-wrap items-center justify-between gap-3 mb-5">
         <div>
           <h1 className="text-2xl sm:text-3xl font-bold text-white flex items-center gap-2.5">
             <PlaySquare className="h-6 w-6 text-[#f06c82]" />
             <span>Videolarımız</span>
             <span className="rounded-full bg-[#38121c] border border-rose-300/20 px-3 py-0.5 text-xs font-medium text-rose-200">
-              12 Video (Örnek)
+              12 Video
             </span>
           </h1>
           <p className="mt-1 text-xs sm:text-sm text-rose-100/75">
-            Birlikte kaydettiğimiz en özel video kliplerin sinematik vitrin görünümü.
+            Birlikte kaydettiğimiz en özel anlarımız ve video kliplerimiz.
           </p>
         </div>
+
+        <button
+          type="button"
+          onClick={() => onSelectTab("ani-kitabi")}
+          className="rounded-xl bg-[#c81e3a] hover:bg-[#e02444] px-4 py-2 text-xs font-semibold text-white cursor-pointer"
+        >
+          Anı Kitabını Aç
+        </button>
       </div>
 
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5">
@@ -152,7 +124,7 @@ export function VideosDemoView({ onSelectTab }: { onSelectTab: (tab: NavTab) => 
             </div>
             <div className="p-4">
               <h3 className="text-sm font-semibold text-white">{vid.title}</h3>
-              <p className="mt-1 text-xs text-rose-200/65">{vid.date} • Örnek Video Kaydı</p>
+              <p className="mt-1 text-xs text-rose-200/65">{vid.date}</p>
             </div>
           </div>
         ))}
@@ -162,6 +134,7 @@ export function VideosDemoView({ onSelectTab }: { onSelectTab: (tab: NavTab) => 
 }
 
 export function MusicDemoView({ onSelectTab }: { onSelectTab: (tab: NavTab) => void }) {
+  void onSelectTab;
   const sampleTracks = [
     { id: 1, title: "Bizim Şarkımız ♡", artist: "Sana Özel Çalma Listesi", duration: "3:56", memory: "İlk dans ettiğimiz şarkı" },
     { id: 2, title: "Gün Batımı Melodisi", artist: "Akustik Sevgili", duration: "4:12", memory: "Sahil yolunda dinlediğimiz" },
@@ -173,8 +146,6 @@ export function MusicDemoView({ onSelectTab }: { onSelectTab: (tab: NavTab) => v
 
   return (
     <section className="mx-auto max-w-[1440px] px-4 sm:px-6 lg:px-10 py-6 pb-28">
-      <DemoBanner featureName="Müzik Listemiz (37 Şarkı Örnek Liste)" onGoToWorking={onSelectTab} />
-
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         <div className="rounded-2xl border border-rose-200/15 bg-[#1e0910] p-6 flex flex-col items-center text-center shadow-xl">
           <img
@@ -184,11 +155,8 @@ export function MusicDemoView({ onSelectTab }: { onSelectTab: (tab: NavTab) => v
           />
           <h1 className="text-xl font-bold text-white">Müzik Listemiz ♡</h1>
           <p className="mt-1 text-xs text-rose-200/75">
-            37 Şarkı • 2 saat 18 dakika romantik seçki (Örnek Gösterim)
+            37 Şarkı • 2 saat 18 dakika romantik seçki
           </p>
-          <div className="mt-4 rounded-xl bg-black/35 border border-rose-300/15 p-3 text-xs text-rose-100/80">
-            Alt kısımdaki sabit müzik oynatıcı referans tasarıma uygun görsel demo modundadır.
-          </div>
         </div>
 
         <div className="lg:col-span-2 rounded-2xl border border-rose-200/15 bg-[#1b080e]/90 p-5 shadow-xl">
@@ -231,6 +199,7 @@ export function MusicDemoView({ onSelectTab }: { onSelectTab: (tab: NavTab) => v
 }
 
 export function SpecialDatesDemoView({ onSelectTab }: { onSelectTab: (tab: NavTab) => void }) {
+  void onSelectTab;
   const dates = [
     { title: "İlk Tanıştığımız Gün ♡", date: "14 Şubat 2024", badge: "Yıldönümü", desc: "Göz göze geldiğimiz ve hikayemizin başladığı o unutulmaz gün." },
     { title: "İlk Kahve Randevumuz", date: "18 Şubat 2024", badge: "İlkler", desc: "Saatlerce konuşup zamanın nasıl geçtiğini anlamadığımız akşam." },
@@ -244,11 +213,9 @@ export function SpecialDatesDemoView({ onSelectTab }: { onSelectTab: (tab: NavTa
 
   return (
     <section className="mx-auto max-w-[1440px] px-4 sm:px-6 lg:px-10 py-6 pb-28">
-      <DemoBanner featureName="Özel Günler (8 Tarih Örnek Takvim)" onGoToWorking={onSelectTab} />
-
       <h1 className="text-2xl sm:text-3xl font-bold text-white flex items-center gap-2.5 mb-5">
         <CalendarHeart className="h-6 w-6 text-[#f06c82]" />
-        <span>Özel Günlerimiz (8 Tarih)</span>
+        <span>Özel Günlerimiz</span>
       </h1>
 
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
@@ -275,22 +242,25 @@ export function SpecialDatesDemoView({ onSelectTab }: { onSelectTab: (tab: NavTa
 }
 
 export function NotesDemoView({ onSelectTab }: { onSelectTab: (tab: NavTab) => void }) {
+  void onSelectTab;
+  const { currentCouple } = useAuth();
+  const p1 = currentCouple?.partner1Name || "Emir";
+  const p2 = currentCouple?.partner2Name || "Hazal";
+
   const sampleNotes = [
-    { title: "Günaydın Notu ♡", date: "12 Ekim 2025", author: "Ben", text: "Sabah uyanır uyanmaz aklıma gelen ilk şey yine senin gülüşündü..." },
-    { title: "Cebinde Kalan Sinema Bileti", date: "25 Ekim 2025", author: "Sen", text: "O akşam izlediğimiz filmden çok, elimi tutuşunu hatırlıyorum." },
-    { title: "Yağmurlu Gün Hatırası", date: "08 Kasım 2025", author: "Ben", text: "Tek bir şemsiyenin altında ıslanırken bile dünyanın en şanslı insanıydım." },
-    { title: "Sana Küçük Bir Söz", date: "19 Kasım 2025", author: "Sen", text: "Hangi mevsim olursa olsun, senin yanın benim hep ilkbaharım." },
-    { title: "Gece Yarısı Mektubu", date: "01 Aralık 2025", author: "Ben", text: "Seninle her an daha güzel, her yeni gün ayrı bir macera... ♡" },
-    { title: "Kahve Kokulu Sabahlar", date: "15 Aralık 2025", author: "Sen", text: "Birlikte içtiğimiz her kahvenin kırk yıl değil, bir ömür hatırı var." },
+    { title: "Günaydın Notu ♡", date: "12 Ekim 2025", author: p1, text: "Sabah uyanır uyanmaz aklıma gelen ilk şey yine senin gülüşündü..." },
+    { title: "Cebinde Kalan Sinema Bileti", date: "25 Ekim 2025", author: p2, text: "O akşam izlediğimiz filmden çok, elimi tutuşunu hatırlıyorum." },
+    { title: "Yağmurlu Gün Hatırası", date: "08 Kasım 2025", author: p1, text: "Tek bir şemsiyenin altında ıslanırken bile dünyanın en şanslı insanıydım." },
+    { title: "Sana Küçük Bir Söz", date: "19 Kasım 2025", author: p2, text: "Hangi mevsim olursa olsun, senin yanın benim hep ilkbaharım." },
+    { title: "Gece Yarısı Mektubu", date: "01 Aralık 2025", author: p1, text: "Seninle her an daha güzel, her yeni gün ayrı bir macera... ♡" },
+    { title: "Kahve Kokulu Sabahlar", date: "15 Aralık 2025", author: p2, text: "Birlikte içtiğimiz her kahvenin kırk yıl değil, bir ömür hatırı var." },
   ];
 
   return (
     <section className="mx-auto max-w-[1440px] px-4 sm:px-6 lg:px-10 py-6 pb-28">
-      <DemoBanner featureName="Notlarımız (14 Not Örnek Mektup Köşesi)" onGoToWorking={onSelectTab} />
-
       <h1 className="text-2xl sm:text-3xl font-bold text-white flex items-center gap-2.5 mb-5">
         <StickyNote className="h-6 w-6 text-[#f06c82]" />
-        <span>Notlarımız (Örnek Seçki)</span>
+        <span>Notlarımız</span>
       </h1>
 
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
@@ -335,29 +305,26 @@ export function UsCoupleView({
             <div className="flex items-center -space-x-4">
               <img
                 src={currentCouple?.avatar1 || "/images/avatar-ben.webp"}
-                alt={currentCouple?.partner1Name || "Ben"}
+                alt={currentCouple?.partner1Name || "Emir"}
                 className="h-20 w-20 rounded-full border-4 border-[#2b0c14] object-cover shadow-lg"
               />
               <img
                 src={currentCouple?.avatar2 || "/images/avatar-sen.webp"}
-                alt={currentCouple?.partner2Name || "Sen"}
+                alt={currentCouple?.partner2Name || "Hazal"}
                 className="h-20 w-20 rounded-full border-4 border-[#2b0c14] object-cover shadow-lg"
               />
             </div>
             <div>
               <span className="inline-flex items-center gap-1.5 rounded-full bg-[#3d131f] border border-rose-300/20 px-3 py-1 text-xs font-semibold text-[#f06c82]">
                 <Sparkles className="h-3.5 w-3.5" />
-                Aktif Demo Çift Hesabı: {currentCouple?.id.toUpperCase()}
+                Bizim Hikayemiz ♡
               </span>
               <h1 className="mt-2 text-2xl sm:text-3xl font-bold text-white">
-                {currentCouple?.partner1Name} &amp; {currentCouple?.partner2Name}{" "}
+                {currentCouple?.partner1Name} ve {currentCouple?.partner2Name}{" "}
                 <span className="text-[#f06c82]">♡</span>
               </h1>
               <p className="mt-1 text-xs sm:text-sm text-rose-100/75">
-                Başlangıç Tarihimiz: {currentCouple?.anniversaryDate} • IndexedDB İsim Alanı:{" "}
-                <code className="rounded bg-black/40 px-1.5 py-0.5 text-rose-200">
-                  BizimFilmDB_{currentCouple?.id}
-                </code>
+                Başlangıç Tarihimiz: {currentCouple?.anniversaryDate}
               </p>
             </div>
           </div>
@@ -381,7 +348,7 @@ export function UsCoupleView({
           >
             <BookOpen className="h-5 w-5 text-[#f06c82] mb-2" />
             <div className="text-2xl font-bold text-white">{pagesCount} Sayfa</div>
-            <div className="text-xs text-rose-200/70">Canlı Anı Kitabı Sayfası</div>
+            <div className="text-xs text-rose-200/70">Anı Kitabı Sayfası</div>
           </div>
 
           <div
@@ -390,7 +357,7 @@ export function UsCoupleView({
           >
             <ImageIcon className="h-5 w-5 text-[#f06c82] mb-2" />
             <div className="text-2xl font-bold text-white">{photosCount} Fotoğraf</div>
-            <div className="text-xs text-rose-200/70">IndexedDB Kayıtlı Galeri</div>
+            <div className="text-xs text-rose-200/70">Fotoğraf Galerimiz</div>
           </div>
 
           <div
@@ -399,7 +366,7 @@ export function UsCoupleView({
           >
             <PlaySquare className="h-5 w-5 text-[#f06c82] mb-2" />
             <div className="text-2xl font-bold text-white">12 Video</div>
-            <div className="text-xs text-rose-200/70">Gösterim Amaçlı Koleksiyon</div>
+            <div className="text-xs text-rose-200/70">Video Koleksiyonumuz</div>
           </div>
 
           <div
@@ -408,7 +375,7 @@ export function UsCoupleView({
           >
             <Heart className="h-5 w-5 text-[#f06c82] mb-2" />
             <div className="text-2xl font-bold text-white">37 Şarkı</div>
-            <div className="text-xs text-rose-200/70">Özel Çalma Listesi</div>
+            <div className="text-xs text-rose-200/70">Özel Çalma Listemiz</div>
           </div>
         </div>
       </div>
@@ -549,19 +516,19 @@ export function NotificationsModal({
     {
       title: "Anı Kitabımız %72 tamamlandı ♡",
       desc: "Yeni fotoğraflarınızı ve romantik notlarınızı ekleyerek kitabınızı zenginleştirebilirsiniz.",
-      time: "Örnek Bildirim",
+      time: "Bugün",
       tab: "ani-kitabi" as NavTab,
     },
     {
-      title: "Yıldönümü Hatırlatması (Örnek)",
+      title: "Yıldönümü Hatırlatması",
       desc: "Özel Günler takviminizde kayıtlı 8 özel tarih bulunuyor.",
-      time: "Gösterim Amaçlı",
+      time: "Takvim",
       tab: "ozel-gunler" as NavTab,
     },
     {
-      title: "Yerel IndexedDB Yedekleme İpucu",
-      desc: "Fotoğraflarınızı ve kitap sayfalarınızı Hesap Ayarları menüsünden JSON olarak dışa aktarabilirsiniz.",
-      time: "Sistem Bilgisi",
+      title: "Veri Yedekleme",
+      desc: "Fotoğraflarınızı ve kitap sayfalarınızı Hesap Ayarları menüsünden yedekleyebilirsiniz.",
+      time: "Ayarlar",
       tab: "biz" as NavTab,
     },
   ];
@@ -578,7 +545,7 @@ export function NotificationsModal({
         <div className="flex items-center justify-between border-b border-rose-200/10 pb-3 mb-3">
           <div className="flex items-center gap-2 text-sm font-bold">
             <Bell className="h-4 w-4 text-[#f06c82]" />
-            <span>Bildirimler (Demo)</span>
+            <span>Bildirimler</span>
           </div>
           <button
             type="button"

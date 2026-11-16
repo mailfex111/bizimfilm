@@ -238,8 +238,8 @@ export default function PhotosView({
             </span>
           </h1>
           <p className="mt-1 text-xs sm:text-sm text-rose-100/75">
-            Yüklediğiniz fotoğraflar EXIF konum verileri temizlenerek otomatik WebP formatına
-            dönüştürülür ve tarayıcınızın IndexedDB alanında ({coupleId}) saklanır.
+            Yüklediğiniz fotoğraflar otomatik olarak yüksek kalitede optimize edilir ve anı
+            galerinizde saklanır.
           </p>
         </div>
 
