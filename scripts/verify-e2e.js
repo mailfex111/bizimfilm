@@ -48,15 +48,15 @@ async function run() {
       }
     });
 
-    await page.setViewport({ width: 1280, height: 720, deviceScaleFactor: 1.5 });
+    await page.setViewport({ width: 1440, height: 900, deviceScaleFactor: 1.5 });
     await page.goto(BASE_URL, { waitUntil: "networkidle0" });
     await sleep(600);
 
-    // Screenshot 1: Login Screen
+    // Screenshot 1: Redesigned Split Login Screen
     await page.screenshot({
       path: path.join(ARTIFACT_DIR, "bizimfilm_login.png"),
     });
-    console.log("✓ Captured login screen");
+    console.log("✓ Captured redesigned split login screen");
 
     // Test invalid credentials
     await page.type("#bizimfilm-username", "yanlis");
@@ -64,25 +64,41 @@ async function run() {
     await page.click('button[type="submit"]');
     await sleep(300);
     const alertText = await page.$eval('[role="alert"]', (el) => el.textContent);
-    console.log("✓ Invalid login alert verified:", alertText.slice(0, 50) + "...");
+    console.log("✓ Invalid login alert verified:", alertText);
 
-    // Quick fill cift1 and login
-    const buttons = await page.$$("button");
-    for (const btn of buttons) {
+    // Open "Demo hesaplarını görüntüle" modal and select Emir ve Hazal
+    const allLoginBtns = await page.$$("button");
+    for (const btn of allLoginBtns) {
       const txt = await page.evaluate((el) => el.textContent, btn);
-      if (txt && txt.includes("cift1 / Demo1234!")) {
+      if (txt && txt.includes("Demo hesaplarını görüntüle")) {
         await btn.click();
         break;
       }
     }
+    await sleep(400);
+
+    const modalBtns = await page.$$("button");
+    for (const btn of modalBtns) {
+      const txt = await page.evaluate((el) => el.textContent, btn);
+      if (txt && txt.includes("Emir ve Hazal")) {
+        await btn.click();
+        break;
+      }
+    }
+    await sleep(300);
+
     await page.click('button[type="submit"]');
     await sleep(1600);
 
-    // Screenshot 2: Desktop Home matching Reference Image
+    // Screenshot 2: Redesigned Desktop Home Page
     await page.screenshot({
       path: path.join(ARTIFACT_DIR, "bizimfilm_home_desktop.png"),
     });
-    console.log("✓ Captured desktop home screen");
+    await page.screenshot({
+      path: path.join(ARTIFACT_DIR, "bizimfilm_home_full.png"),
+      fullPage: true,
+    });
+    console.log("✓ Captured redesigned desktop home screen (viewport & full page)");
 
     // Verify session persistence across reload
     await page.reload({ waitUntil: "networkidle0" });
@@ -93,16 +109,15 @@ async function run() {
     }
     console.log("✓ Session persistence across reload verified");
 
-    // Open Page Editor in Memory Book and test auto-save
-    const editBtns = await page.$$('button[title="Bu sayfayı düzenle"]');
+    // Open Apple Pages-style Page Editor in Memory Book
+    const editBtns = await page.$$('button[title="Sayfayı düzenle"]');
     if (editBtns.length > 0) {
       await editBtns[0].click();
       await sleep(500);
       await page.screenshot({
         path: path.join(ARTIFACT_DIR, "bizimfilm_book_editor.png"),
       });
-      console.log("✓ Captured Memory Book Page Editor modal");
-      // Close editor
+      console.log("✓ Captured Apple Pages-style Memory Book Editor modal");
       const allBtns = await page.$$("button");
       for (const b of allBtns) {
         const t = await page.evaluate((el) => el.textContent, b);
@@ -125,14 +140,13 @@ async function run() {
     }
     await sleep(800);
 
-    // Create a sample test image to upload
     const testImgPath = path.join(__dirname, "test-upload.png");
     await sharp({
       create: {
-        width: 1800,
+        width: 1600,
         height: 1200,
         channels: 3,
-        background: { r: 200, g: 45, b: 75 },
+        background: { r: 42, g: 38, b: 40 },
       },
     })
       .png()
@@ -142,7 +156,6 @@ async function run() {
     await fileInput.uploadFile(testImgPath);
     await sleep(500);
 
-    // Submit the upload form
     const confirmBtn = await page.$('form button[type="submit"]');
     await confirmBtn.click();
     await sleep(1200);
@@ -152,7 +165,7 @@ async function run() {
     });
     console.log("✓ Photo uploaded, optimized to WebP, and saved to IndexedDB");
 
-    // Reload and verify the uploaded photo is still in IndexedDB for cift1
+    // Reload and verify the uploaded photo persisted in IndexedDB
     await page.reload({ waitUntil: "networkidle0" });
     await sleep(1000);
     const navBtnsAfter = await page.$$("nav button");
@@ -165,21 +178,11 @@ async function run() {
     }
     await sleep(800);
     const bodyText = await page.evaluate(() => document.body.innerText);
-    if (!bodyText.includes("7 Kayıtlı Görsel")) {
+    if (!bodyText.includes("7 öğe")) {
       throw new Error("Uploaded photo count did not persist after reload!");
     }
-    console.log("✓ Uploaded photo persisted across reload for cift1 (7 Kayıtlı Görsel)");
+    console.log("✓ Uploaded photo persisted across reload (7 öğe)");
 
-    // Verify IndexedDB namespace isolation by checking cift2 has its own separate 6 seed photos
-    const dbs = await page.evaluate(async () => {
-      if (window.indexedDB.databases) {
-        return await window.indexedDB.databases();
-      }
-      return [];
-    });
-    console.log("✓ Active IndexedDB namespaces:", dbs.map((d) => d.name));
-
-    // Clean up temporary test image
     if (fs.existsSync(testImgPath)) fs.unlinkSync(testImgPath);
 
     // Test Mobile Viewport (390x844) and check horizontal overflow
@@ -201,7 +204,7 @@ async function run() {
     await page.screenshot({
       path: path.join(ARTIFACT_DIR, "bizimfilm_mobile.png"),
     });
-    console.log("✓ Captured mobile screenshot");
+    console.log("✓ Captured redesigned mobile screenshot");
 
     console.log("Console errors count:", consoleErrors.length);
     if (consoleErrors.length > 0) {

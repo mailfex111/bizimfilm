@@ -169,9 +169,9 @@ function getInitialSeedBookPages(coupleId: CoupleId): BookPageItem[] {
   const now = Date.now();
 
   const customNoteByCouple: Record<CoupleId, string> = {
-    cift1: "Seninle her an daha güzel... ♡",
-    cift2: "Sümeyya & Berke — Seninle her an daha güzel... ♡",
-    cift3: "Gamze & Onur — Seninle her an daha güzel... ♡",
+    cift1: "Seninle geçen her an, zamanın en güzel yerinde duruyor.",
+    cift2: "Sümeyya ve Berke — Seninle geçen her an daha anlamlı.",
+    cift3: "Gamze ve Onur — Seninle geçen her an daha anlamlı.",
   };
 
   return [
@@ -179,7 +179,7 @@ function getInitialSeedBookPages(coupleId: CoupleId): BookPageItem[] {
       id: `${coupleId}-page-1`,
       coupleId,
       order: 0,
-      title: "Bizim Hikayemiz ♡",
+      title: "Bizim Hikayemiz",
       date: "14 Ağustos 2025",
       content: "Seninle tanıştığım o günü hiçbir zaman unutmayacağım.",
       photoUrl: "/images/polaroid-sunset.webp",
@@ -196,7 +196,7 @@ function getInitialSeedBookPages(coupleId: CoupleId): BookPageItem[] {
       photoUrl: "/images/polaroid-night.webp",
       secondaryPhotoUrl: "/images/polaroid-hands.webp",
       hasVideoBadge: true,
-      videoDurationText: "0:00 / 1:24",
+      videoDurationText: "01:24",
       layoutVariant: "collage-right",
       updatedAt: now - 50000,
     },
@@ -204,7 +204,7 @@ function getInitialSeedBookPages(coupleId: CoupleId): BookPageItem[] {
       id: `${coupleId}-page-3`,
       coupleId,
       order: 2,
-      title: "İlk Gün Batımımız ♡",
+      title: "İlk Gün Batımımız",
       date: "19 Ekim 2025",
       content:
         "Şehrin tüm ışıkları sönse bile senin gözlerindeki parıltı yolumuzu aydınlatmaya yeter.",
@@ -219,7 +219,7 @@ function getInitialSeedBookPages(coupleId: CoupleId): BookPageItem[] {
       title: "Bizim Şarkımız Çalarken",
       date: "05 Kasım 2025",
       content:
-        "Aynı battaniyenin altında saatlerce konuştuğumuz, zamanın durduğu o akşamımız...",
+        "Aynı battaniyenin altında saatlerce konuştuğumuz, zamanın durduğu o akşamımız.",
       photoUrl: "/images/card-videos.webp",
       layoutVariant: "polaroid-standard",
       updatedAt: now - 30000,
@@ -240,10 +240,10 @@ function getInitialSeedBookPages(coupleId: CoupleId): BookPageItem[] {
       id: `${coupleId}-page-6`,
       coupleId,
       order: 5,
-      title: "Sonsuza Dek Biz ♡",
+      title: "Birlikte Nice Yıllara",
       date: "14 Şubat 2026",
       content:
-        "Birlikte ekleyeceğimiz nice yeni sayfalara, nice güzel yıllara sevgilim...",
+        "Birlikte ekleyeceğimiz nice yeni sayfalara, nice güzel yıllara.",
       photoUrl: "/images/polaroid-hands.webp",
       layoutVariant: "polaroid-standard",
       updatedAt: now - 10000,
@@ -257,7 +257,20 @@ export async function ensureCoupleSeedData(coupleId: CoupleId): Promise<void> {
 
   const state = await db.coupleState.get(coupleId);
   if (state) {
-    // Already initialized for this couple namespace
+    // Non-destructive migration: strip decorative heart symbols from untouched seed pages
+    const existing = await db.bookPages.toArray();
+    const updatedSeedPages = existing.filter(
+      (p) => p.title.includes("♡") || p.content.includes("♡")
+    );
+    if (updatedSeedPages.length > 0) {
+      await db.bookPages.bulkPut(
+        updatedSeedPages.map((p) => ({
+          ...p,
+          title: p.title.replace(/\s*♡/g, "").trim(),
+          content: p.content.replace(/\s*♡/g, "").trim(),
+        }))
+      );
+    }
     return;
   }
 

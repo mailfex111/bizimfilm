@@ -3,17 +3,13 @@
 import React, { useEffect, useRef, useState } from "react";
 import {
   Upload,
-  Image as ImageIcon,
   Trash2,
   BookOpen,
-  ZoomIn,
-  Calendar,
+  Maximize2,
   Edit3,
   Check,
   X,
   AlertCircle,
-  Sparkles,
-  ShieldCheck,
 } from "lucide-react";
 import {
   addCouplePhoto,
@@ -47,7 +43,6 @@ export default function PhotosView({
 }: PhotosViewProps) {
   const fileInputRef = useRef<HTMLInputElement | null>(null);
 
-  // Upload workflow state
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [previewObjectUrl, setPreviewObjectUrl] = useState<string | null>(null);
   const [newTitle, setNewTitle] = useState("");
@@ -58,7 +53,6 @@ export default function PhotosView({
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [toastMessage, setToastMessage] = useState<string | null>(null);
 
-  // Gallery interaction state
   const [lightboxPhoto, setLightboxPhoto] = useState<PhotoItem | null>(null);
   const [editingPhotoId, setEditingPhotoId] = useState<string | null>(null);
   const [editTitle, setEditTitle] = useState("");
@@ -83,10 +77,9 @@ export default function PhotosView({
     setToastMessage(msg);
     setTimeout(() => {
       setToastMessage((prev) => (prev === msg ? null : prev));
-    }, 3800);
+    }, 3600);
   };
 
-  // Step 1-4: File selected -> validate -> show preview
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
@@ -106,7 +99,7 @@ export default function PhotosView({
     const objUrl = URL.createObjectURL(file);
     setSelectedFile(file);
     setPreviewObjectUrl(objUrl);
-    setNewTitle(file.name.replace(/\.[^.]+$/, "") || "Yeni Anımız");
+    setNewTitle(file.name.replace(/\.[^.]+$/, "") || "Yeni Fotoğraf");
     setNewDate(new Date().toISOString().slice(0, 10));
     e.target.value = "";
   };
@@ -121,7 +114,6 @@ export default function PhotosView({
     setUploadStage("");
   };
 
-  // Step 5-8: Optimize -> WebP -> Save to IndexedDB -> Add to gallery
   const handleConfirmUpload = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!selectedFile) return;
@@ -129,7 +121,7 @@ export default function PhotosView({
     setErrorMessage(null);
     setIsUploading(true);
     setUploadProgress(5);
-    setUploadStage("Yükleme başlatılıyor...");
+    setUploadStage("Hazırlanıyor...");
 
     try {
       const optimized = await optimizeImageToWebP(selectedFile, (pct, stage) => {
@@ -140,7 +132,7 @@ export default function PhotosView({
       const photoRecord: PhotoItem = {
         id: `${coupleId}-photo-${Date.now()}`,
         coupleId,
-        title: newTitle.trim() || "Bizim Anımız ♡",
+        title: newTitle.trim() || "Anımız",
         date: newDate || new Date().toISOString().slice(0, 10),
         dataUrl: optimized.dataUrl,
         mimeType: optimized.mimeType,
@@ -152,13 +144,11 @@ export default function PhotosView({
 
       await addCouplePhoto(photoRecord);
       setUploadProgress(100);
-      setUploadStage("Tamamlandı!");
+      setUploadStage("Tamamlandı");
       await onPhotosChange();
 
       const savedKB = Math.round(optimized.sizeBytes / 1024);
-      showToast(
-        `"${photoRecord.title}" WebP formatına (${savedKB} KB) optimize edilerek IndexedDB'ye kaydedildi.`
-      );
+      showToast(`"${photoRecord.title}" arşivlendi (${savedKB} KB WebP).`);
       cancelPreview();
     } catch (err) {
       setErrorMessage(
@@ -173,13 +163,13 @@ export default function PhotosView({
 
   const handleStartEdit = (photo: PhotoItem) => {
     setEditingPhotoId(photo.id);
-    setEditTitle(photo.title);
+    setEditTitle(photo.title.replace(/\s*\([^)]*\)/g, ""));
     setEditDate(photo.date);
   };
 
   const handleSaveEdit = async (photoId: string) => {
     await updateCouplePhoto(coupleId, photoId, {
-      title: editTitle.trim() || "Anımız ♡",
+      title: editTitle.trim() || "Anımız",
       date: editDate,
     });
     setEditingPhotoId(null);
@@ -193,7 +183,7 @@ export default function PhotosView({
       setLightboxPhoto(null);
     }
     await onPhotosChange();
-    showToast(`"${photo.title}" galeriden silindi.`);
+    showToast(`"${photo.title}" arşivden kaldırıldı.`);
   };
 
   const handleSendToMemoryBook = async (photo: PhotoItem) => {
@@ -210,7 +200,7 @@ export default function PhotosView({
       id: `${coupleId}-page-${Date.now()}`,
       coupleId,
       order: newPageOrder,
-      title: photo.title || "Bizim Hikayemiz ♡",
+      title: photo.title.replace(/\s*\([^)]*\)/g, "") || "Bizim Hikayemiz",
       date: formattedDate,
       content: "Seninle tanıştığım o günü hiçbir zaman unutmayacağım.",
       photoUrl: photo.dataUrl,
@@ -221,25 +211,27 @@ export default function PhotosView({
     await saveCoupleBookPage(newBookPage);
     const updatedPages = [...bookPages, newBookPage];
     onPagesChange(updatedPages);
-    showToast(`"${photo.title}" Anı Kitabı'na yeni sayfa (Sayfa ${newPageOrder + 1}) olarak eklendi!`);
+    showToast(
+      `"${newBookPage.title}" Anı Kitabı'na Sayfa ${newPageOrder + 1} olarak eklendi.`
+    );
     onSwitchToBook(newPageOrder);
   };
 
   return (
-    <section className="mx-auto max-w-[1440px] px-4 sm:px-6 lg:px-10 py-6 pb-28">
-      {/* Top Header & Upload CTA */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-rose-200/10 pb-5">
+    <section className="mx-auto max-w-[1360px] px-4 sm:px-6 lg:px-10 py-8 pb-28">
+      {/* Archival Header */}
+      <div className="flex flex-col sm:flex-row sm:items-end justify-between gap-4 border-b border-[#343438]/70 pb-6">
         <div>
-          <h1 className="text-2xl sm:text-3xl font-bold text-white flex items-center gap-2.5">
-            <ImageIcon className="h-6 w-6 text-[#f06c82]" />
-            <span>Fotoğraflarımız</span>
-            <span className="rounded-full bg-[#38121c] border border-rose-300/20 px-3 py-0.5 text-xs font-medium text-rose-200">
-              {photos.length} Kayıtlı Görsel
+          <div className="flex items-baseline gap-3">
+            <h1 className="text-[28px] sm:text-[36px] font-semibold tracking-[-0.025em] text-[#F5F5F7]">
+              Fotoğraflar
+            </h1>
+            <span className="text-[14px] font-medium text-[#A1A1A6]">
+              {photos.length} öğe
             </span>
-          </h1>
-          <p className="mt-1 text-xs sm:text-sm text-rose-100/75">
-            Yüklediğiniz fotoğraflar otomatik olarak yüksek kalitede optimize edilir ve anı
-            galerinizde saklanır.
+          </div>
+          <p className="mt-1 text-[14px] text-[#A1A1A6]">
+            Yüklenen görseller otomatik olarak WebP formatına optimize edilir ve yerel arşivinizde saklanır.
           </p>
         </div>
 
@@ -254,7 +246,7 @@ export default function PhotosView({
           <button
             type="button"
             onClick={() => fileInputRef.current?.click()}
-            className="inline-flex items-center gap-2 rounded-xl bg-[#c81e3a] hover:bg-[#df2343] active:scale-[0.99] px-5 py-2.5 text-xs sm:text-sm font-semibold text-white shadow-[0_6px_22px_rgba(200,30,58,0.45)] transition cursor-pointer"
+            className="inline-flex items-center gap-2 rounded-lg bg-[#F5F5F7] hover:bg-white active:scale-[0.99] px-4 py-2.5 text-[13px] font-medium text-[#101012] transition-apple cursor-pointer"
           >
             <Upload className="h-4 w-4" />
             <span>Fotoğraf Yükle</span>
@@ -262,20 +254,20 @@ export default function PhotosView({
         </div>
       </div>
 
-      {/* Feedback Alerts */}
+      {/* Feedback Banner */}
       {errorMessage && (
         <div
           role="alert"
-          className="mt-4 flex items-center justify-between rounded-xl border border-rose-500/40 bg-rose-950/75 px-4 py-3 text-xs sm:text-sm text-rose-100"
+          className="mt-5 flex items-center justify-between rounded-lg border border-[#D88A96]/40 bg-[#18181B] px-4 py-3 text-[13px] text-[#F5F5F7]"
         >
           <div className="flex items-center gap-2.5">
-            <AlertCircle className="h-4 w-4 text-rose-400 shrink-0" />
+            <AlertCircle className="h-4 w-4 text-[#D88A96] shrink-0" />
             <span>{errorMessage}</span>
           </div>
           <button
             type="button"
             onClick={() => setErrorMessage(null)}
-            className="text-rose-200/70 hover:text-white"
+            className="text-[#A1A1A6] hover:text-[#F5F5F7]"
           >
             <X className="h-4 w-4" />
           </button>
@@ -283,115 +275,112 @@ export default function PhotosView({
       )}
 
       {toastMessage && (
-        <div className="mt-4 flex items-center justify-between rounded-xl border border-emerald-400/30 bg-emerald-950/75 px-4 py-3 text-xs sm:text-sm text-emerald-100">
+        <div className="mt-5 flex items-center justify-between rounded-lg border border-[#343438] bg-[#18181B] px-4 py-3 text-[13px] text-[#F5F5F7]">
           <div className="flex items-center gap-2">
-            <Sparkles className="h-4 w-4 text-emerald-300 shrink-0" />
+            <Check className="h-4 w-4 text-[#D88A96] shrink-0" />
             <span>{toastMessage}</span>
           </div>
           <button
             type="button"
             onClick={() => setToastMessage(null)}
-            className="text-emerald-200/70 hover:text-white"
+            className="text-[#A1A1A6] hover:text-[#F5F5F7]"
           >
             <X className="h-4 w-4" />
           </button>
         </div>
       )}
 
-      {/* Preview & Optimization Panel when a file is chosen */}
+      {/* Upload Preview Sheet */}
       {selectedFile && previewObjectUrl && (
         <form
           onSubmit={handleConfirmUpload}
-          className="mt-5 rounded-2xl border border-rose-300/25 bg-[#220b12]/95 p-5 shadow-2xl"
+          className="mt-6 rounded-xl border border-[#343438] bg-[#18181B] p-6"
         >
           <div className="flex items-center justify-between mb-4">
-            <h2 className="text-base font-semibold text-white flex items-center gap-2">
-              <ShieldCheck className="h-4 w-4 text-[#f06c82]" />
-              <span>Görsel Önizleme ve WebP Optimizasyonu</span>
+            <h2 className="text-[16px] font-semibold text-[#F5F5F7]">
+              Yeni Fotoğraf Ekle
             </h2>
             <button
               type="button"
               onClick={cancelPreview}
               disabled={isUploading}
-              className="text-rose-200/70 hover:text-white cursor-pointer"
+              className="text-[#A1A1A6] hover:text-[#F5F5F7] cursor-pointer"
             >
-              <X className="h-5 w-5" />
+              <X className="h-4 w-4" />
             </button>
           </div>
 
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-5 items-center">
-            <div className="relative aspect-[4/3] w-full overflow-hidden rounded-xl border border-rose-200/15 bg-black/50">
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-6 items-center">
+            <div className="relative aspect-[4/3] w-full overflow-hidden rounded-lg border border-[#343438] bg-[#101012]">
               <img
                 src={previewObjectUrl}
-                alt="Yüklenecek görsel önizlemesi"
+                alt="Önizleme"
                 className="h-full w-full object-contain"
               />
-              <span className="absolute bottom-2 right-2 rounded bg-black/75 px-2 py-0.5 text-[10px] text-rose-200">
-                Orijinal: {(selectedFile.size / 1024).toFixed(0)} KB
+              <span className="absolute bottom-2 right-2 rounded bg-[#101012]/80 px-2 py-0.5 text-[11px] text-[#A1A1A6]">
+                {(selectedFile.size / 1024).toFixed(0)} KB
               </span>
             </div>
 
-            <div className="md:col-span-2 space-y-3.5">
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <div className="md:col-span-2 space-y-4">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div>
-                  <label className="block text-xs font-medium text-rose-100/85 mb-1">
-                    Fotoğraf Başlığı
+                  <label className="block text-[12px] font-medium text-[#A1A1A6] mb-1.5">
+                    Başlık
                   </label>
                   <input
                     type="text"
                     value={newTitle}
                     onChange={(e) => setNewTitle(e.target.value)}
-                    placeholder="Örn: İlk Tatilimiz ♡"
-                    className="w-full rounded-xl border border-rose-200/15 bg-[#14060a] px-3.5 py-2 text-sm text-white focus:border-[#e63956] focus:outline-none"
+                    placeholder="Gün Batımında Biz"
+                    className="w-full rounded-lg border border-[#343438] bg-[#101012] px-3.5 py-2 text-[14px] text-[#F5F5F7] focus:border-[#D88A96] focus:outline-none"
                   />
                 </div>
 
                 <div>
-                  <label className="block text-xs font-medium text-rose-100/85 mb-1">
-                    Fotoğraf Tarihi
+                  <label className="block text-[12px] font-medium text-[#A1A1A6] mb-1.5">
+                    Tarih
                   </label>
                   <input
                     type="date"
                     value={newDate}
                     onChange={(e) => setNewDate(e.target.value)}
-                    className="w-full rounded-xl border border-rose-200/15 bg-[#14060a] px-3.5 py-2 text-sm text-white focus:border-[#e63956] focus:outline-none"
+                    className="w-full rounded-lg border border-[#343438] bg-[#101012] px-3.5 py-2 text-[14px] text-[#F5F5F7] focus:border-[#D88A96] focus:outline-none"
                   />
                 </div>
               </div>
 
               {isUploading && (
-                <div className="space-y-1.5 pt-1">
-                  <div className="flex items-center justify-between text-xs text-rose-200">
+                <div className="space-y-1.5">
+                  <div className="flex items-center justify-between text-[12px] text-[#A1A1A6]">
                     <span>{uploadStage}</span>
                     <span>%{uploadProgress}</span>
                   </div>
-                  <div className="h-2 w-full overflow-hidden rounded-full bg-white/10">
+                  <div className="h-1.5 w-full overflow-hidden rounded-full bg-[#222226]">
                     <div
-                      className="h-full rounded-full bg-gradient-to-r from-[#c81e3a] to-[#f06c82] transition-all duration-200"
+                      className="h-full rounded-full bg-[#D88A96] transition-all duration-150"
                       style={{ width: `${uploadProgress}%` }}
                     />
                   </div>
                 </div>
               )}
 
-              <div className="flex flex-wrap items-center justify-end gap-2.5 pt-2">
+              <div className="flex items-center justify-end gap-2.5 pt-2">
                 <button
                   type="button"
                   onClick={cancelPreview}
                   disabled={isUploading}
-                  className="rounded-xl border border-rose-200/15 bg-white/5 hover:bg-white/10 px-4 py-2 text-xs font-medium text-rose-100 cursor-pointer"
+                  className="rounded-lg border border-[#343438] bg-[#101012] hover:bg-[#222226] px-4 py-2 text-[13px] font-medium text-[#F5F5F7] cursor-pointer"
                 >
                   Vazgeç
                 </button>
                 <button
                   type="submit"
                   disabled={isUploading}
-                  className="inline-flex items-center gap-2 rounded-xl bg-[#c81e3a] hover:bg-[#e02444] px-5 py-2 text-xs sm:text-sm font-semibold text-white shadow-lg cursor-pointer disabled:opacity-60"
+                  className="inline-flex items-center gap-2 rounded-lg bg-[#F5F5F7] hover:bg-white px-5 py-2 text-[13px] font-medium text-[#101012] cursor-pointer disabled:opacity-50"
                 >
                   <Check className="h-4 w-4" />
-                  <span>
-                    {isUploading ? "Optimize Ediliyor..." : "Optimize Et ve Galeriye Kaydet"}
-                  </span>
+                  <span>{isUploading ? "Kaydediliyor..." : "Arşive Kaydet"}</span>
                 </button>
               </div>
             </div>
@@ -399,163 +388,176 @@ export default function PhotosView({
         </form>
       )}
 
-      {/* Responsive Photo Gallery Grid */}
-      <div className="mt-6 grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
+      {/* Apple Photos-Style Consistent Archival Grid */}
+      <div className="mt-8 grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-6">
         {photos.map((photo) => {
           const isEditing = editingPhotoId === photo.id;
+          const cleanPhotoTitle = photo.title.replace(/\s*\([^)]*\)/g, "");
 
           return (
-            <div
-              key={photo.id}
-              className="group flex flex-col justify-between overflow-hidden rounded-2xl border border-rose-200/15 bg-[#1b080e]/90 shadow-[0_10px_30px_rgba(0,0,0,0.45)] transition hover:border-rose-300/35"
-            >
-              {/* Image Area */}
+            <div key={photo.id} className="group flex flex-col">
+              {/* Thumbnail Frame */}
               <div
                 onClick={() => setLightboxPhoto(photo)}
-                className="relative aspect-[4/3] w-full overflow-hidden bg-[#120508] cursor-pointer"
+                className="relative aspect-[4/3] w-full overflow-hidden rounded-xl border border-[#343438]/70 bg-[#18181B] cursor-pointer"
               >
                 <img
                   src={photo.dataUrl}
-                  alt={photo.title}
+                  alt={cleanPhotoTitle}
                   loading="lazy"
-                  className="h-full w-full object-cover transition-transform duration-300 group-hover:scale-105"
+                  className="h-full w-full object-cover transition-transform duration-200 group-hover:scale-[1.02]"
                 />
-                <div className="absolute inset-0 bg-gradient-to-t from-black/70 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity flex items-end justify-between p-3">
-                  <span className="inline-flex items-center gap-1 rounded-full bg-black/65 px-2.5 py-1 text-[11px] text-white">
-                    <ZoomIn className="h-3 w-3 text-[#f06c82]" />
-                    Büyüt
+
+                {/* Subtle Hover Action Bar */}
+                <div className="absolute inset-0 bg-gradient-to-t from-black/70 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-150 flex items-end justify-between p-3">
+                  <span className="inline-flex items-center gap-1.5 rounded-md bg-[#101012]/80 px-2.5 py-1 text-[11px] font-medium text-[#F5F5F7]">
+                    <Maximize2 className="h-3 w-3" />
+                    Görüntüle
                   </span>
-                  <span className="rounded bg-black/65 px-2 py-0.5 text-[10px] text-rose-200">
-                    {Math.round(photo.sizeBytes / 1024)} KB • WebP
-                  </span>
+
+                  <div
+                    onClick={(e) => e.stopPropagation()}
+                    className="flex items-center gap-1.5"
+                  >
+                    <button
+                      type="button"
+                      onClick={() => void handleSendToMemoryBook(photo)}
+                      title="Anı Kitabına Ekle"
+                      className="rounded-md bg-[#101012]/85 hover:bg-[#F5F5F7] p-1.5 text-[#F5F5F7] hover:text-[#101012] transition-apple cursor-pointer"
+                    >
+                      <BookOpen className="h-3.5 w-3.5" />
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => handleStartEdit(photo)}
+                      title="Düzenle"
+                      className="rounded-md bg-[#101012]/85 hover:bg-[#F5F5F7] p-1.5 text-[#F5F5F7] hover:text-[#101012] transition-apple cursor-pointer"
+                    >
+                      <Edit3 className="h-3.5 w-3.5" />
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => void handleDeletePhoto(photo)}
+                      title="Sil"
+                      className="rounded-md bg-[#101012]/85 hover:bg-[#D88A96] p-1.5 text-[#F5F5F7] hover:text-[#101012] transition-apple cursor-pointer"
+                    >
+                      <Trash2 className="h-3.5 w-3.5" />
+                    </button>
+                  </div>
                 </div>
               </div>
 
-              {/* Card Body: Title, Date & Actions */}
-              <div className="p-3.5 flex-1 flex flex-col justify-between">
-                {isEditing ? (
-                  <div className="space-y-2 mb-2">
-                    <input
-                      type="text"
-                      value={editTitle}
-                      onChange={(e) => setEditTitle(e.target.value)}
-                      className="w-full rounded-lg border border-rose-300/30 bg-[#120508] px-2.5 py-1.5 text-xs text-white focus:outline-none"
-                    />
-                    <input
-                      type="date"
-                      value={editDate}
-                      onChange={(e) => setEditDate(e.target.value)}
-                      className="w-full rounded-lg border border-rose-300/30 bg-[#120508] px-2.5 py-1.5 text-xs text-white focus:outline-none"
-                    />
-                    <div className="flex items-center justify-end gap-1.5 pt-1">
-                      <button
-                        type="button"
-                        onClick={() => setEditingPhotoId(null)}
-                        className="rounded-lg bg-white/10 px-2.5 py-1 text-[11px] text-rose-100 cursor-pointer"
-                      >
-                        İptal
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => void handleSaveEdit(photo.id)}
-                        className="inline-flex items-center gap-1 rounded-lg bg-[#c81e3a] px-2.5 py-1 text-[11px] font-medium text-white cursor-pointer"
-                      >
-                        <Check className="h-3 w-3" />
-                        Kaydet
-                      </button>
-                    </div>
+              {/* Minimal Metadata Below Image */}
+              {isEditing ? (
+                <div className="mt-2.5 space-y-2 rounded-lg border border-[#343438] bg-[#18181B] p-3">
+                  <input
+                    type="text"
+                    value={editTitle}
+                    onChange={(e) => setEditTitle(e.target.value)}
+                    className="w-full rounded border border-[#343438] bg-[#101012] px-2.5 py-1.5 text-[13px] text-[#F5F5F7] focus:border-[#D88A96] focus:outline-none"
+                  />
+                  <input
+                    type="date"
+                    value={editDate}
+                    onChange={(e) => setEditDate(e.target.value)}
+                    className="w-full rounded border border-[#343438] bg-[#101012] px-2.5 py-1.5 text-[12px] text-[#F5F5F7] focus:border-[#D88A96] focus:outline-none"
+                  />
+                  <div className="flex items-center justify-end gap-1.5 pt-1">
+                    <button
+                      type="button"
+                      onClick={() => setEditingPhotoId(null)}
+                      className="rounded px-2.5 py-1 text-[12px] text-[#A1A1A6] hover:text-[#F5F5F7] cursor-pointer"
+                    >
+                      İptal
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => void handleSaveEdit(photo.id)}
+                      className="rounded bg-[#F5F5F7] px-2.5 py-1 text-[12px] font-medium text-[#101012] cursor-pointer"
+                    >
+                      Kaydet
+                    </button>
                   </div>
-                ) : (
-                  <div className="mb-3">
-                    <div className="flex items-start justify-between gap-2">
-                      <h3 className="text-sm font-semibold text-white leading-snug truncate">
-                        {photo.title}
-                      </h3>
-                      <button
-                        type="button"
-                        onClick={() => handleStartEdit(photo)}
-                        title="Başlık ve Tarihi Düzenle"
-                        className="text-rose-200/60 hover:text-white p-0.5 shrink-0 cursor-pointer"
-                      >
-                        <Edit3 className="h-3.5 w-3.5" />
-                      </button>
-                    </div>
-                    <div className="mt-1 flex items-center gap-1.5 text-[11px] text-rose-200/65">
-                      <Calendar className="h-3 w-3 text-[#f06c82]" />
-                      <span>{photo.date || "Tarih belirtilmedi"}</span>
-                    </div>
+                </div>
+              ) : (
+                <div className="mt-2.5 flex items-baseline justify-between gap-2">
+                  <div className="min-w-0">
+                    <h3 className="text-[15px] font-medium text-[#F5F5F7] truncate">
+                      {cleanPhotoTitle}
+                    </h3>
+                    <p className="text-[12px] text-[#A1A1A6] tabular-nums mt-0.5">
+                      {photo.date}
+                    </p>
                   </div>
-                )}
 
-                <div className="flex items-center justify-between gap-2 pt-2.5 border-t border-rose-200/10">
                   <button
                     type="button"
                     onClick={() => void handleSendToMemoryBook(photo)}
-                    className="flex-1 inline-flex items-center justify-center gap-1.5 rounded-lg bg-[#38121c] hover:bg-[#c81e3a] border border-rose-300/20 px-2.5 py-1.5 text-[11px] font-medium text-rose-100 hover:text-white transition cursor-pointer"
+                    className="text-[12px] font-medium text-[#A1A1A6] hover:text-[#D88A96] shrink-0 transition-apple cursor-pointer"
                   >
-                    <BookOpen className="h-3.5 w-3.5 text-[#f06c82] group-hover:text-white" />
-                    <span>Anı Kitabına Gönder</span>
-                  </button>
-
-                  <button
-                    type="button"
-                    onClick={() => void handleDeletePhoto(photo)}
-                    title="Fotoğrafı Sil"
-                    className="rounded-lg border border-rose-500/25 bg-rose-950/50 hover:bg-rose-900 p-1.5 text-rose-200 hover:text-white transition cursor-pointer"
-                  >
-                    <Trash2 className="h-3.5 w-3.5" />
+                    Kitaba Ekle
                   </button>
                 </div>
-              </div>
+              )}
             </div>
           );
         })}
       </div>
 
-      {/* Lightbox Modal when clicking a photo */}
+      {/* Fullscreen Darkroom Lightbox Viewer */}
       {lightboxPhoto && (
         <div
           onClick={() => setLightboxPhoto(null)}
-          className="fixed inset-0 z-50 flex items-center justify-center bg-black/85 p-4 backdrop-blur-md"
+          className="fixed inset-0 z-50 flex flex-col justify-between bg-[#101012]/95 p-4 sm:p-8 backdrop-blur-md"
         >
           <div
             onClick={(e) => e.stopPropagation()}
-            className="relative max-w-4xl w-full rounded-2xl border border-rose-200/20 bg-[#1a070c] p-4 shadow-2xl"
+            className="mx-auto flex w-full max-w-6xl items-center justify-between"
           >
-            <div className="flex items-center justify-between pb-3 mb-3 border-b border-rose-200/10">
-              <div>
-                <h3 className="text-base font-bold text-white">{lightboxPhoto.title}</h3>
-                <p className="text-xs text-rose-200/70">{lightboxPhoto.date}</p>
-              </div>
-              <div className="flex items-center gap-2">
-                <button
-                  type="button"
-                  onClick={() => {
-                    void handleSendToMemoryBook(lightboxPhoto);
-                    setLightboxPhoto(null);
-                  }}
-                  className="inline-flex items-center gap-1.5 rounded-lg bg-[#c81e3a] hover:bg-[#e02444] px-3 py-1.5 text-xs font-semibold text-white cursor-pointer"
-                >
-                  <BookOpen className="h-3.5 w-3.5" />
-                  <span>Anı Kitabına Gönder</span>
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setLightboxPhoto(null)}
-                  className="rounded-lg p-1.5 text-rose-200/70 hover:bg-white/10 hover:text-white cursor-pointer"
-                >
-                  <X className="h-5 w-5" />
-                </button>
-              </div>
+            <div>
+              <h3 className="text-[16px] font-semibold text-[#F5F5F7]">
+                {lightboxPhoto.title.replace(/\s*\([^)]*\)/g, "")}
+              </h3>
+              <p className="text-[12px] text-[#A1A1A6]">{lightboxPhoto.date}</p>
             </div>
 
-            <div className="max-h-[72vh] overflow-hidden rounded-xl bg-black flex items-center justify-center">
-              <img
-                src={lightboxPhoto.dataUrl}
-                alt={lightboxPhoto.title}
-                className="max-h-[70vh] w-auto object-contain"
-              />
+            <div className="flex items-center gap-2.5">
+              <button
+                type="button"
+                onClick={() => {
+                  void handleSendToMemoryBook(lightboxPhoto);
+                  setLightboxPhoto(null);
+                }}
+                className="inline-flex items-center gap-1.5 rounded-lg bg-[#F5F5F7] hover:bg-white px-3.5 py-1.5 text-[12px] font-medium text-[#101012] cursor-pointer"
+              >
+                <BookOpen className="h-3.5 w-3.5" />
+                <span>Anı Kitabına Ekle</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => setLightboxPhoto(null)}
+                aria-label="Kapat"
+                className="rounded-lg border border-[#343438] bg-[#18181B] p-2 text-[#A1A1A6] hover:text-[#F5F5F7] cursor-pointer"
+              >
+                <X className="h-4 w-4" />
+              </button>
             </div>
+          </div>
+
+          <div
+            onClick={(e) => e.stopPropagation()}
+            className="my-auto flex items-center justify-center overflow-hidden py-4"
+          >
+            <img
+              src={lightboxPhoto.dataUrl}
+              alt={lightboxPhoto.title}
+              className="max-h-[76vh] w-auto rounded-lg object-contain shadow-2xl"
+            />
+          </div>
+
+          <div className="text-center text-[12px] text-[#A1A1A6]">
+            {lightboxPhoto.width} × {lightboxPhoto.height} px •{" "}
+            {Math.round(lightboxPhoto.sizeBytes / 1024)} KB
           </div>
         </div>
       )}

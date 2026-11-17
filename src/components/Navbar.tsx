@@ -1,23 +1,16 @@
 "use client";
 
-import React, { useEffect, useState } from "react";
+import React, { useState } from "react";
 import {
-  Heart,
-  Home,
-  BookOpen,
-  Image as ImageIcon,
-  PlaySquare,
-  Music,
-  User,
   Search,
   Bell,
   ChevronDown,
-  Users,
-  Plus,
   Settings,
   LogOut,
   Menu,
   X,
+  Check,
+  User,
 } from "lucide-react";
 import { useAuth } from "@/context/AuthContext";
 import { type CoupleId, type NavTab } from "@/types";
@@ -31,13 +24,18 @@ interface NavbarProps {
   unreadNotificationsCount?: number;
 }
 
-const NAV_ITEMS: { id: NavTab; label: string; icon: React.ComponentType<{ className?: string }> }[] = [
-  { id: "ana-sayfa", label: "Ana Sayfa", icon: Home },
-  { id: "ani-kitabi", label: "Anı Kitabı", icon: BookOpen },
-  { id: "fotograflar", label: "Fotoğraflar", icon: ImageIcon },
-  { id: "videolar", label: "Videolar", icon: PlaySquare },
-  { id: "muzik", label: "Müzik", icon: Music },
-  { id: "biz", label: "Biz", icon: User },
+const NAV_ITEMS: { id: NavTab; label: string }[] = [
+  { id: "ana-sayfa", label: "Ana Sayfa" },
+  { id: "ani-kitabi", label: "Anı Kitabı" },
+  { id: "fotograflar", label: "Fotoğraflar" },
+  { id: "videolar", label: "Videolar" },
+  { id: "muzik", label: "Müzik" },
+];
+
+const COUPLE_LIST: { id: CoupleId; names: string }[] = [
+  { id: "cift1", names: "Emir ve Hazal" },
+  { id: "cift2", names: "Sümeyya ve Berke" },
+  { id: "cift3", names: "Gamze ve Onur" },
 ];
 
 export default function Navbar({
@@ -46,44 +44,32 @@ export default function Navbar({
   onOpenSearch,
   onOpenNotifications,
   onOpenSettingsModal,
-  unreadNotificationsCount = 3,
+  unreadNotificationsCount = 2,
 }: NavbarProps) {
   const { currentCouple, logout, switchDemoCouple } = useAuth();
   const [profileMenuOpen, setProfileMenuOpen] = useState(false);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
-  const [activePartner, setActivePartner] = useState<"p1" | "p2">("p1");
-  const [showCoupleSwitcher, setShowCoupleSwitcher] = useState(false);
-
-  // Open dropdown initially only on wide desktop screens on Ana Sayfa to match reference image
-  useEffect(() => {
-    if (window.innerWidth >= 1024 && activeTab === "ana-sayfa") {
-      setProfileMenuOpen(true);
-    } else {
-      setProfileMenuOpen(false);
-    }
-  }, [activeTab]);
 
   const partner1Label = currentCouple?.partner1Name || "Emir";
   const partner2Label = currentCouple?.partner2Name || "Hazal";
+  const coupleFullName = `${partner1Label} & ${partner2Label}`;
 
   const handleNavClick = (tab: NavTab) => {
     onSelectTab(tab);
     setMobileMenuOpen(false);
-    if (tab !== "ana-sayfa") {
-      setProfileMenuOpen(false);
-    }
+    setProfileMenuOpen(false);
   };
 
   return (
-    <header className="sticky top-0 z-40 w-full bg-gradient-to-r from-[#240a10] via-[#2c0d15] to-[#1e080e] border-b border-rose-200/10 shadow-[0_4px_20px_rgba(0,0,0,0.5)]">
-      <div className="mx-auto flex h-12 max-w-[1440px] items-center justify-between px-4 sm:px-6 lg:px-8">
-        {/* Left: Heart + BizimFilm Logo */}
+    <header className="sticky top-0 z-40 w-full bg-[#101012]/90 backdrop-blur-md border-b border-[#343438]/60">
+      <div className="mx-auto flex h-14 max-w-[1360px] items-center justify-between px-4 sm:px-6 lg:px-10">
+        {/* Left: Minimal Wordmark + Mobile Menu Trigger */}
         <div className="flex items-center gap-3">
           <button
             type="button"
             onClick={() => setMobileMenuOpen((prev) => !prev)}
-            aria-label="Menüyü Aç/Kapat"
-            className="flex lg:hidden h-8 w-8 items-center justify-center rounded-lg border border-rose-200/15 bg-rose-950/40 text-rose-100 hover:bg-rose-900/50 transition"
+            aria-label="Menü"
+            className="flex md:hidden h-8 w-8 items-center justify-center rounded-lg border border-[#343438] bg-[#18181B] text-[#F5F5F7] hover:bg-[#222226] transition-apple"
           >
             {mobileMenuOpen ? <X className="h-4 w-4" /> : <Menu className="h-4 w-4" />}
           </button>
@@ -91,54 +77,47 @@ export default function Navbar({
           <button
             type="button"
             onClick={() => handleNavClick("ana-sayfa")}
-            className="flex items-center gap-2 group cursor-pointer focus:outline-none"
+            className="text-[18px] font-semibold tracking-[-0.025em] text-[#F5F5F7] hover:opacity-85 transition-apple cursor-pointer focus:outline-none"
           >
-            <Heart className="h-5 w-5 text-[#f06c82] stroke-[2] group-hover:scale-105 transition-transform" />
-            <span className="font-serif italic text-[20px] font-semibold tracking-wide text-white">
-              BizimFilm
-              <span className="text-[#f06c82] text-[11px] ml-0.5 not-italic align-middle">♥</span>
-            </span>
+            BizimFilm
           </button>
         </div>
 
-        {/* Center Navigation Links (Desktop) */}
+        {/* Center: Clean Minimal Navigation Links */}
         <nav
           aria-label="Ana Navigasyon"
-          className="hidden lg:flex items-center gap-1.5 xl:gap-2"
+          className="hidden md:flex items-center gap-7 h-full"
         >
           {NAV_ITEMS.map((item) => {
-            const Icon = item.icon;
             const isActive = activeTab === item.id;
             return (
               <button
                 key={item.id}
                 type="button"
                 onClick={() => handleNavClick(item.id)}
-                className={`flex items-center gap-2 rounded-lg px-3 py-1 text-xs font-medium transition cursor-pointer ${
+                className={`relative h-full flex items-center text-[14px] font-medium transition-apple cursor-pointer ${
                   isActive
-                    ? "bg-[#4d1724] text-white border border-rose-300/20 shadow-[0_2px_12px_rgba(200,30,58,0.28)]"
-                    : "text-rose-100/80 hover:text-white hover:bg-white/5"
+                    ? "text-[#F5F5F7]"
+                    : "text-[#A1A1A6] hover:text-[#F5F5F7]"
                 }`}
               >
-                <Icon
-                  className={`h-3.5 w-3.5 ${
-                    isActive ? "text-white" : "text-rose-200/75"
-                  }`}
-                />
                 <span>{item.label}</span>
+                {isActive && (
+                  <span className="absolute bottom-0 inset-x-0 h-[2px] rounded-full bg-[#D88A96]" />
+                )}
               </button>
             );
           })}
         </nav>
 
-        {/* Right: Search, Bell, Couple Avatars & Dropdown */}
-        <div className="relative flex items-center gap-2.5 sm:gap-3">
+        {/* Right: Search, Notifications, Profile Menu */}
+        <div className="relative flex items-center gap-2 sm:gap-3">
           <button
             type="button"
             onClick={onOpenSearch}
             aria-label="Arama"
-            title="Anılarda Ara"
-            className="flex h-7 w-7 items-center justify-center rounded-full text-rose-100/85 hover:bg-white/10 hover:text-white transition cursor-pointer"
+            title="Ara"
+            className="flex h-8 w-8 items-center justify-center rounded-lg text-[#A1A1A6] hover:bg-[#18181B] hover:text-[#F5F5F7] transition-apple cursor-pointer"
           >
             <Search className="h-4 w-4" />
           </button>
@@ -148,161 +127,121 @@ export default function Navbar({
             onClick={onOpenNotifications}
             aria-label="Bildirimler"
             title="Bildirimler"
-            className="relative flex h-7 w-7 items-center justify-center rounded-full text-rose-100/85 hover:bg-white/10 hover:text-white transition cursor-pointer"
+            className="relative flex h-8 w-8 items-center justify-center rounded-lg text-[#A1A1A6] hover:bg-[#18181B] hover:text-[#F5F5F7] transition-apple cursor-pointer"
           >
             <Bell className="h-4 w-4" />
             {unreadNotificationsCount > 0 && (
-              <span className="absolute top-1 right-1 h-1.5 w-1.5 rounded-full bg-[#f06c82] ring-2 ring-[#240a10]" />
+              <span className="absolute top-2 right-2 h-1.5 w-1.5 rounded-full bg-[#D88A96]" />
             )}
           </button>
 
-          {/* Dual Couple Avatars Button */}
+          {/* Couple Profile Pill */}
           <button
             type="button"
             onClick={() => setProfileMenuOpen((prev) => !prev)}
             aria-expanded={profileMenuOpen}
-            aria-label="Aile Hesabı Menüsü"
-            className="flex items-center gap-1 rounded-full py-0.5 pl-1 pr-1 hover:bg-white/5 transition cursor-pointer focus:outline-none"
+            aria-label="Profil Menüsü"
+            className="flex items-center gap-2 rounded-full border border-[#343438] bg-[#18181B] hover:bg-[#222226] py-1 pl-1.5 pr-2.5 transition-apple cursor-pointer focus:outline-none"
           >
-            <div className="flex items-center -space-x-2">
+            <div className="flex items-center -space-x-1.5">
               <img
                 src={currentCouple?.avatar1 || "/images/avatar-ben.webp"}
                 alt={partner1Label}
-                width={26}
-                height={26}
-                className="h-6 w-6 rounded-full border-2 border-[#2a0c13] object-cover shadow-sm"
+                width={24}
+                height={24}
+                className="h-6 w-6 rounded-full border border-[#101012] object-cover"
               />
               <img
                 src={currentCouple?.avatar2 || "/images/avatar-sen.webp"}
                 alt={partner2Label}
-                width={26}
-                height={26}
-                className="h-6 w-6 rounded-full border-2 border-[#2a0c13] object-cover shadow-sm"
+                width={24}
+                height={24}
+                className="h-6 w-6 rounded-full border border-[#101012] object-cover"
               />
             </div>
+            <span className="hidden sm:inline text-[13px] font-medium text-[#F5F5F7]">
+              {coupleFullName}
+            </span>
             <ChevronDown
-              className={`h-3 w-3 text-rose-200/80 transition-transform duration-200 ${
+              className={`h-3.5 w-3.5 text-[#A1A1A6] transition-transform duration-150 ${
                 profileMenuOpen ? "rotate-180" : ""
               }`}
             />
           </button>
 
-          {/* Profile Dropdown Menu (Matches Reference Image 1:1) */}
+          {/* Clean Profile Dropdown */}
           {profileMenuOpen && (
-            <div className="absolute right-0 top-[calc(100%+6px)] z-50 w-44 rounded-xl border border-rose-200/15 bg-[#1e0a0f]/95 p-2 shadow-[0_14px_40px_rgba(0,0,0,0.85)] backdrop-blur-xl">
-              {/* Top Pill: Aile Hesabı */}
-              <div className="mb-1.5 flex items-center gap-2 rounded-lg bg-[#38121c] px-2.5 py-1.5 border border-rose-300/15 text-[11px] font-semibold text-[#f2738a]">
-                <Users className="h-3.5 w-3.5 text-[#f2738a]" />
-                <span>Aile Hesabı</span>
-              </div>
+            <>
+              <div
+                onClick={() => setProfileMenuOpen(false)}
+                className="fixed inset-0 z-40"
+              />
+              <div className="absolute right-0 top-[calc(100%+8px)] z-50 w-56 rounded-xl border border-[#343438] bg-[#18181B] p-2 shadow-2xl">
+                <div className="px-3 py-2 border-b border-[#343438]/70 mb-1.5">
+                  <div className="text-[13px] font-semibold text-[#F5F5F7]">
+                    {coupleFullName}
+                  </div>
+                  <div className="text-[11px] text-[#A1A1A6]">
+                    {currentCouple?.anniversaryDate}
+                  </div>
+                </div>
 
-              {/* Partner 1: Ben ♡ */}
-              <button
-                type="button"
-                onClick={() => setActivePartner("p1")}
-                className={`flex w-full items-center gap-2 rounded-lg px-2 py-1 text-left text-[11px] transition cursor-pointer ${
-                  activePartner === "p1"
-                    ? "bg-white/10 text-white font-medium"
-                    : "text-rose-100/80 hover:bg-white/5"
-                }`}
-              >
-                <img
-                  src={currentCouple?.avatar1 || "/images/avatar-ben.webp"}
-                  alt={partner1Label}
-                  width={22}
-                  height={22}
-                  className="h-5 w-5 rounded-full object-cover border border-rose-300/30"
-                />
-                <span>
-                  {partner1Label} <span className="text-[#f2738a]">♡</span>
-                </span>
-              </button>
+                <button
+                  type="button"
+                  onClick={() => handleNavClick("biz")}
+                  className="flex w-full items-center gap-2.5 rounded-lg px-3 py-2 text-left text-[13px] text-[#F5F5F7] hover:bg-[#222226] transition-apple cursor-pointer"
+                >
+                  <User className="h-3.5 w-3.5 text-[#A1A1A6]" />
+                  <span>Çift Profilimiz</span>
+                </button>
 
-              {/* Partner 2: Sen ♡ */}
-              <button
-                type="button"
-                onClick={() => setActivePartner("p2")}
-                className={`mt-0.5 flex w-full items-center gap-2 rounded-lg px-2 py-1 text-left text-[11px] transition cursor-pointer ${
-                  activePartner === "p2"
-                    ? "bg-white/10 text-white font-medium"
-                    : "text-rose-100/80 hover:bg-white/5"
-                }`}
-              >
-                <img
-                  src={currentCouple?.avatar2 || "/images/avatar-sen.webp"}
-                  alt={partner2Label}
-                  width={22}
-                  height={22}
-                  className="h-5 w-5 rounded-full object-cover border border-rose-300/30"
-                />
-                <span>
-                  {partner2Label} <span className="text-[#f2738a]">♡</span>
-                </span>
-              </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setProfileMenuOpen(false);
+                    onOpenSettingsModal();
+                  }}
+                  className="flex w-full items-center gap-2.5 rounded-lg px-3 py-2 text-left text-[13px] text-[#F5F5F7] hover:bg-[#222226] transition-apple cursor-pointer"
+                >
+                  <Settings className="h-3.5 w-3.5 text-[#A1A1A6]" />
+                  <span>Veri ve Yedekleme</span>
+                </button>
 
-              {/* + Profil Ekle / Demo Çift Değiştir */}
-              <button
-                type="button"
-                onClick={() => setShowCoupleSwitcher((prev) => !prev)}
-                className="mt-0.5 flex w-full items-center gap-2 rounded-lg px-2 py-1 text-left text-[11px] text-rose-100/80 hover:bg-white/5 hover:text-white transition cursor-pointer"
-              >
-                <Plus className="h-3 w-3 text-rose-200/70 ml-0.5" />
-                <span>Profil Ekle</span>
-              </button>
+                <div className="my-1.5 h-px bg-[#343438]/70" />
 
-              {showCoupleSwitcher && (
-                <div className="my-1 rounded-lg bg-black/50 p-1.5 border border-rose-200/10 space-y-1">
-                  {(
-                    [
-                      { id: "cift1", names: "Emir & Hazal" },
-                      { id: "cift2", names: "Sümeyya & Berke" },
-                      { id: "cift3", names: "Gamze & Onur" },
-                    ] as { id: CoupleId; names: string }[]
-                  ).map((item) => (
+                <div className="px-3 py-1 text-[11px] font-medium text-[#A1A1A6]">
+                  Hesap Değiştir
+                </div>
+                {COUPLE_LIST.map((item) => {
+                  const isCurrent = currentCouple?.id === item.id;
+                  return (
                     <button
                       key={item.id}
                       type="button"
                       onClick={() => {
                         void switchDemoCouple(item.id);
-                        setShowCoupleSwitcher(false);
+                        setProfileMenuOpen(false);
                       }}
-                      className={`w-full rounded px-2 py-1 text-left text-[10px] flex items-center justify-between cursor-pointer ${
-                        currentCouple?.id === item.id
-                          ? "bg-[#c81e3a] text-white font-medium"
-                          : "text-rose-100/75 hover:bg-white/10"
-                      }`}
+                      className="flex w-full items-center justify-between rounded-lg px-3 py-1.5 text-left text-[12px] text-[#F5F5F7] hover:bg-[#222226] transition-apple cursor-pointer"
                     >
                       <span>{item.names}</span>
-                      {currentCouple?.id === item.id && <span>Aktif</span>}
+                      {isCurrent && <Check className="h-3.5 w-3.5 text-[#D88A96]" />}
                     </button>
-                  ))}
-                </div>
-              )}
+                  );
+                })}
 
-              <div className="my-1 h-px bg-rose-200/10" />
+                <div className="my-1.5 h-px bg-[#343438]/70" />
 
-              {/* Hesap Ayarları (Yedekleme dahil) */}
-              <button
-                type="button"
-                onClick={() => {
-                  onOpenSettingsModal();
-                }}
-                className="flex w-full items-center gap-2 rounded-lg px-2 py-1 text-left text-[11px] text-rose-100/80 hover:bg-white/5 hover:text-white transition cursor-pointer"
-              >
-                <Settings className="h-3 w-3 text-rose-200/70 ml-0.5" />
-                <span>Hesap Ayarları</span>
-              </button>
-
-              {/* Çıkış Yap */}
-              <button
-                type="button"
-                onClick={logout}
-                className="mt-0.5 flex w-full items-center gap-2 rounded-lg px-2 py-1 text-left text-[11px] text-rose-200/90 hover:bg-rose-950/80 hover:text-rose-100 transition cursor-pointer"
-              >
-                <LogOut className="h-3 w-3 text-rose-300/80 ml-0.5" />
-                <span>Çıkış Yap</span>
-              </button>
-            </div>
+                <button
+                  type="button"
+                  onClick={logout}
+                  className="flex w-full items-center gap-2.5 rounded-lg px-3 py-2 text-left text-[13px] text-[#D88A96] hover:bg-[#222226] transition-apple cursor-pointer"
+                >
+                  <LogOut className="h-3.5 w-3.5" />
+                  <span>Çıkış Yap</span>
+                </button>
+              </div>
+            </>
           )}
         </div>
       </div>
@@ -311,25 +250,26 @@ export default function Navbar({
       {mobileMenuOpen && (
         <nav
           aria-label="Mobil Navigasyon"
-          className="lg:hidden border-t border-rose-200/10 bg-[#1a070c]/95 px-4 py-3 backdrop-blur-xl"
+          className="md:hidden border-t border-[#343438] bg-[#18181B] px-4 py-3"
         >
-          <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
+          <div className="flex flex-col gap-1">
             {NAV_ITEMS.map((item) => {
-              const Icon = item.icon;
               const isActive = activeTab === item.id;
               return (
                 <button
                   key={item.id}
                   type="button"
                   onClick={() => handleNavClick(item.id)}
-                  className={`flex items-center gap-2 rounded-xl px-3 py-2 text-xs font-medium transition ${
+                  className={`flex items-center justify-between rounded-lg px-3 py-2.5 text-[14px] font-medium transition-apple ${
                     isActive
-                      ? "bg-[#4d1724] text-white border border-rose-300/25"
-                      : "bg-white/5 text-rose-100/80 hover:bg-white/10"
+                      ? "bg-[#222226] text-[#F5F5F7]"
+                      : "text-[#A1A1A6] hover:bg-[#222226]/50 hover:text-[#F5F5F7]"
                   }`}
                 >
-                  <Icon className="h-4 w-4 text-[#f06c82]" />
                   <span>{item.label}</span>
+                  {isActive && (
+                    <span className="h-1.5 w-1.5 rounded-full bg-[#D88A96]" />
+                  )}
                 </button>
               );
             })}

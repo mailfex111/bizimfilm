@@ -1,47 +1,73 @@
 @import "tailwindcss";
 
 :root {
-  --bg-deep: #110508;
-  --bg-burgundy: #1e080e;
-  --accent-crimson: #c81e3a;
-  --accent-pink: #f06c82;
+  --bg-primary: #101012;
+  --bg-secondary: #18181B;
+  --bg-elevated: #222226;
+  --text-primary: #F5F5F7;
+  --text-secondary: #A1A1A6;
+  --border-subtle: #343438;
+  --accent: #D88A96;
 }
 
 @layer base {
   html,
   body {
-    background-color: #110508;
-    color: #ffffff;
-    font-family: -apple-system, BlinkMacSystemFont, "SF Pro Display", "SF Pro Text",
-      "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    background-color: #101012;
+    color: #F5F5F7;
+    font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", "SF Pro Display",
+      var(--font-inter), "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
     overflow-x: hidden;
     -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+    text-rendering: optimizeLegibility;
+  }
+
+  h1,
+  h2,
+  h3 {
+    font-family: -apple-system, BlinkMacSystemFont, "SF Pro Display", "SF Pro Text",
+      var(--font-inter), sans-serif;
   }
 }
 
-.font-serif {
+.font-editorial {
   font-family: var(--font-playfair), Georgia, "Times New Roman", serif;
 }
 
-.font-handwriting {
-  font-family: var(--font-caveat), "Segoe Print", "Bradley Hand", cursive;
+/* Controlled micro-interactions with reduced-motion support */
+.transition-apple {
+  transition-property: color, background-color, border-color, opacity, transform;
+  transition-duration: 180ms;
+  transition-timing-function: cubic-bezier(0.22, 1, 0.36, 1);
 }
 
-/* Custom subtle scrollbar */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}
+
+/* Minimal scrollbar */
 ::-webkit-scrollbar {
   width: 6px;
   height: 6px;
 }
 
 ::-webkit-scrollbar-track {
-  background: #14060a;
+  background: #101012;
 }
 
 ::-webkit-scrollbar-thumb {
-  background: #481723;
+  background: #343438;
   border-radius: 9999px;
 }
 
 ::-webkit-scrollbar-thumb:hover {
-  background: #c81e3a;
+  background: #4a4a50;
 }

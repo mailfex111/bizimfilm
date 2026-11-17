@@ -1,34 +1,34 @@
 import type { Metadata, Viewport } from "next";
-import { Caveat, Playfair_Display } from "next/font/google";
+import { Inter, Playfair_Display } from "next/font/google";
 import "./globals.css";
 import { AuthProvider } from "@/context/AuthContext";
+
+const inter = Inter({
+  subsets: ["latin", "latin-ext"],
+  weight: ["400", "500", "600", "700"],
+  variable: "--font-inter",
+  display: "swap",
+});
 
 const playfair = Playfair_Display({
   subsets: ["latin", "latin-ext"],
   style: ["normal", "italic"],
-  weight: ["600", "700"],
+  weight: ["400", "500", "600"],
   variable: "--font-playfair",
-  display: "swap",
-});
-
-const caveat = Caveat({
-  subsets: ["latin", "latin-ext"],
-  weight: ["600", "700"],
-  variable: "--font-caveat",
   display: "swap",
   preload: false,
 });
 
 export const metadata: Metadata = {
-  title: "BizimFilm ♡ — Sevgililere Özel Dijital Anı Platformu",
+  title: "BizimFilm — Özel Dijital Anı Alanı",
   description:
-    "Fotoğraflarımız, videolarımız, müziklerimiz ve tüm anılarımız... Tek bir yerde.",
+    "Fotoğraflarınız, hikâyeleriniz ve unutmak istemediğiniz anlarınız. Yalnızca ikinize özel.",
 };
 
 export const viewport: Viewport = {
   width: "device-width",
   initialScale: 1,
-  themeColor: "#1e080e",
+  themeColor: "#101012",
 };
 
 export default function RootLayout({
@@ -37,8 +37,8 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="tr" className={`${playfair.variable} ${caveat.variable}`}>
-      <body className="min-h-screen bg-[#110508] text-white antialiased selection:bg-[#c81e3a] selection:text-white">
+    <html lang="tr" className={`${inter.variable} ${playfair.variable}`}>
+      <body className="min-h-screen bg-[#101012] text-[#F5F5F7] antialiased selection:bg-[#D88A96]/30 selection:text-[#F5F5F7]">
         <AuthProvider>{children}</AuthProvider>
       </body>
     </html>

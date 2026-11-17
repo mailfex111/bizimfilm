@@ -4,11 +4,9 @@ import React, { useState } from "react";
 import {
   Download,
   Upload,
-  ShieldAlert,
   CheckCircle2,
   AlertCircle,
   X,
-  Database,
 } from "lucide-react";
 import { exportCoupleBackup, importCoupleBackup } from "@/lib/backup";
 import { COUPLE_ACCOUNTS } from "@/lib/db";
@@ -49,7 +47,7 @@ export default function SettingsBackupModal({
     try {
       await exportCoupleBackup(coupleId);
       setStatusMessage(
-        `${coupleDisplayName} hesabına ait ${photosCount} fotoğraf ve ${pagesCount} kitap sayfası başarıyla dışa aktarıldı.`
+        `${coupleDisplayName} hesabına ait ${photosCount} fotoğraf ve ${pagesCount} kitap sayfası dışa aktarıldı.`
       );
     } catch (err) {
       setErrorMessage(
@@ -71,7 +69,7 @@ export default function SettingsBackupModal({
       const result = await importCoupleBackup(coupleId, file);
       await onDataRestored();
       setStatusMessage(
-        `Yedek başarıyla içe aktarıldı! (${result.photoCount} fotoğraf, ${result.pageCount} kitap sayfası yüklendi.)`
+        `Yedek içe aktarıldı (${result.photoCount} fotoğraf, ${result.pageCount} sayfa).`
       );
     } catch (err) {
       setErrorMessage(
@@ -86,77 +84,72 @@ export default function SettingsBackupModal({
   return (
     <div
       onClick={onClose}
-      className="fixed inset-0 z-50 flex items-center justify-center bg-black/75 p-4 backdrop-blur-md"
+      className="fixed inset-0 z-50 flex items-center justify-center bg-black/75 p-4 backdrop-blur-xs"
     >
       <div
         onClick={(e) => e.stopPropagation()}
-        className="w-full max-w-lg rounded-2xl border border-rose-200/20 bg-[#210b11] p-6 text-white shadow-[0_25px_70px_rgba(0,0,0,0.9)]"
+        className="w-full max-w-lg rounded-2xl border border-[#343438] bg-[#18181B] p-6 text-[#F5F5F7] shadow-2xl"
       >
-        <div className="flex items-center justify-between border-b border-rose-200/10 pb-3.5 mb-4">
-          <div className="flex items-center gap-2.5">
-            <Database className="h-5 w-5 text-[#f06c82]" />
-            <h3 className="text-base sm:text-lg font-bold">
-              Hesap Ayarları — {coupleDisplayName}
+        <div className="flex items-center justify-between border-b border-[#343438] pb-4 mb-5">
+          <div>
+            <h3 className="text-[17px] font-semibold text-[#F5F5F7]">
+              Veri ve Yedekleme — {coupleDisplayName}
             </h3>
+            <p className="text-[12px] text-[#A1A1A6] mt-0.5">
+              Yerel arşivinizi yedekleyin veya mevcut bir yedeği geri yükleyin
+            </p>
           </div>
           <button
             type="button"
             onClick={onClose}
-            className="rounded-lg p-1 text-rose-200/70 hover:bg-white/10 hover:text-white cursor-pointer"
+            className="rounded-lg p-1.5 text-[#A1A1A6] hover:bg-[#222226] hover:text-[#F5F5F7] cursor-pointer"
           >
-            <X className="h-5 w-5" />
+            <X className="h-4 w-4" />
           </button>
         </div>
 
-        {/* Storage Summary */}
-        <div className="rounded-xl border border-rose-200/15 bg-[#15060a] p-4 mb-4">
-          <div className="text-xs font-semibold text-rose-200 mb-1">
-            Aktif Hesap: <span className="text-white">{coupleDisplayName} ♡</span>
+        <div className="rounded-xl border border-[#343438] bg-[#101012] p-4 mb-4">
+          <div className="text-[13px] font-medium text-[#F5F5F7]">
+            {coupleDisplayName}
           </div>
-          <p className="text-xs text-rose-100/75">
-            Kayıtlı Fotoğraf: <strong>{photosCount} adet</strong> • Anı Kitabı Sayfası:{" "}
-            <strong>{pagesCount} sayfa</strong>
+          <p className="text-[12px] text-[#A1A1A6] mt-1">
+            {photosCount} fotoğraf • {pagesCount} kitap sayfası yerel veritabanında (IndexedDB) kayıtlı
           </p>
         </div>
 
-        {/* Browser Data Notice */}
-        <div className="rounded-xl border border-amber-400/25 bg-amber-950/30 p-3.5 mb-5 flex items-start gap-2.5 text-xs text-amber-100/90 leading-relaxed">
-          <ShieldAlert className="h-4 w-4 text-amber-300 shrink-0 mt-0.5" />
-          <div>
-            <strong>Veri Yedekleme Bilgisi:</strong> Fotoğraflarınız ve anı kitabı sayfalarınız
-            tarayıcınızın yerel veritabanında saklanır. Tarayıcı geçmişini veya site verilerini
-            temizlerseniz kayıtlar silinebileceğinden aşağıdan yedek dosyası indirebilirsiniz.
-          </div>
+        <div className="rounded-xl border border-[#343438]/80 bg-[#101012] p-3.5 mb-5 text-[12px] text-[#A1A1A6] leading-relaxed">
+          Fotoğraflarınız ve anı kitabı sayfalarınız tarayıcınızın yerel hafızasında saklanır.
+          Tarayıcı verilerini temizlerseniz kayıtlar silinebileceğinden önemli değişiklikler
+          sonrasında yedek dosyası indirmeniz önerilir.
         </div>
 
         {statusMessage && (
-          <div className="mb-4 flex items-center gap-2 rounded-xl border border-emerald-400/30 bg-emerald-950/70 p-3 text-xs text-emerald-100">
-            <CheckCircle2 className="h-4 w-4 text-emerald-300 shrink-0" />
+          <div className="mb-4 flex items-center gap-2 rounded-lg border border-[#343438] bg-[#222226] p-3 text-[12px] text-[#F5F5F7]">
+            <CheckCircle2 className="h-4 w-4 text-[#D88A96] shrink-0" />
             <span>{statusMessage}</span>
           </div>
         )}
 
         {errorMessage && (
-          <div className="mb-4 flex items-center gap-2 rounded-xl border border-rose-500/40 bg-rose-950/75 p-3 text-xs text-rose-100">
-            <AlertCircle className="h-4 w-4 text-rose-300 shrink-0" />
+          <div className="mb-4 flex items-center gap-2 rounded-lg border border-[#D88A96]/40 bg-[#222226] p-3 text-[12px] text-[#F5F5F7]">
+            <AlertCircle className="h-4 w-4 text-[#D88A96] shrink-0" />
             <span>{errorMessage}</span>
           </div>
         )}
 
-        {/* Backup Export & Import Buttons */}
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
           <button
             type="button"
             disabled={busy}
             onClick={() => void handleExport()}
-            className="flex items-center justify-center gap-2 rounded-xl bg-[#c81e3a] hover:bg-[#e02444] py-3 px-4 text-xs sm:text-sm font-semibold text-white shadow-lg transition cursor-pointer disabled:opacity-50"
+            className="flex items-center justify-center gap-2 rounded-lg bg-[#F5F5F7] hover:bg-white py-2.5 px-4 text-[13px] font-medium text-[#101012] transition-apple cursor-pointer disabled:opacity-50"
           >
             <Download className="h-4 w-4" />
             <span>Verileri Dışa Aktar</span>
           </button>
 
-          <label className="flex items-center justify-center gap-2 rounded-xl border border-rose-200/20 bg-white/5 hover:bg-white/10 py-3 px-4 text-xs sm:text-sm font-semibold text-rose-100 transition cursor-pointer">
-            <Upload className="h-4 w-4 text-[#f06c82]" />
+          <label className="flex items-center justify-center gap-2 rounded-lg border border-[#343438] bg-[#101012] hover:bg-[#222226] py-2.5 px-4 text-[13px] font-medium text-[#F5F5F7] transition-apple cursor-pointer">
+            <Upload className="h-4 w-4 text-[#A1A1A6]" />
             <span>Yedeği İçe Aktar</span>
             <input
               type="file"

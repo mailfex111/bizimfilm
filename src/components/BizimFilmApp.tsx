@@ -34,7 +34,7 @@ const PhotosView = dynamic(() => import("@/components/PhotosView"), {
 });
 
 export default function BizimFilmApp() {
-  const { currentCouple, isHydrated } = useAuth();
+  const { currentCouple } = useAuth();
 
   const [activeTab, setActiveTab] = useState<NavTab>("ana-sayfa");
   const [photos, setPhotos] = useState<PhotoItem[]>([]);
@@ -86,8 +86,8 @@ export default function BizimFilmApp() {
   };
 
   return (
-    <div className="min-h-screen w-full bg-gradient-to-b from-[#17060b] via-[#120508] to-[#0e0406] text-white flex flex-col">
-      {/* Sticky Top Navigation */}
+    <div className="min-h-screen w-full bg-[#101012] text-[#F5F5F7] flex flex-col">
+      {/* Slim Sticky Top Navigation */}
       <Navbar
         activeTab={activeTab}
         onSelectTab={(tab) => setActiveTab(tab)}
@@ -96,18 +96,13 @@ export default function BizimFilmApp() {
         onOpenSettingsModal={() => setSettingsModalOpen(true)}
       />
 
-      {/* Main View Content */}
+      {/* Main Content Area */}
       <main className="flex-1">
         {activeTab === "ana-sayfa" && (
           <>
             <HeroSection
               onOpenMemoryBook={() => setActiveTab("ani-kitabi")}
               onAddMemory={handleOpenPhotoUploadFromAnywhere}
-            />
-            <ContinueRow
-              onSelectTab={(tab) => setActiveTab(tab)}
-              photoCount={photos.length}
-              bookProgress={currentCouple.bookProgress}
             />
             <MemoryBookSection
               coupleId={currentCouple.id}
@@ -120,23 +115,26 @@ export default function BizimFilmApp() {
               onSelectTab={(tab) => setActiveTab(tab)}
               onOpenPhotoUploadModal={handleOpenPhotoUploadFromAnywhere}
             />
+            <ContinueRow
+              photos={photos}
+              onSelectTab={(tab) => setActiveTab(tab)}
+              onOpenPhotoUpload={handleOpenPhotoUploadFromAnywhere}
+            />
           </>
         )}
 
         {activeTab === "ani-kitabi" && (
-          <div className="pt-4">
-            <MemoryBookSection
-              coupleId={currentCouple.id}
-              pages={bookPages}
-              photos={photos}
-              initialPageIndex={lastOpenPage}
-              isFullPageView={true}
-              onPagesChange={setBookPages}
-              onPhotosChange={loadCoupleData}
-              onSelectTab={(tab) => setActiveTab(tab)}
-              onOpenPhotoUploadModal={handleOpenPhotoUploadFromAnywhere}
-            />
-          </div>
+          <MemoryBookSection
+            coupleId={currentCouple.id}
+            pages={bookPages}
+            photos={photos}
+            initialPageIndex={lastOpenPage}
+            isFullPageView={true}
+            onPagesChange={setBookPages}
+            onPhotosChange={loadCoupleData}
+            onSelectTab={(tab) => setActiveTab(tab)}
+            onOpenPhotoUploadModal={handleOpenPhotoUploadFromAnywhere}
+          />
         )}
 
         {activeTab === "fotograflar" && (
@@ -202,7 +200,7 @@ export default function BizimFilmApp() {
         onDataRestored={loadCoupleData}
       />
 
-      {/* Fixed Bottom Music Player Bar */}
+      {/* Compact Bottom Music Player */}
       <MusicPlayerBar onSelectTab={(tab) => setActiveTab(tab)} />
     </div>
   );

@@ -2,13 +2,10 @@
 
 import React, { useState } from "react";
 import {
-  Heart,
-  Shuffle,
   SkipBack,
   Pause,
   Play,
   SkipForward,
-  Repeat,
   Volume2,
   ListMusic,
 } from "lucide-react";
@@ -25,92 +22,70 @@ export default function MusicPlayerBar({ onSelectTab }: MusicPlayerBarProps) {
   const [progressPct, setProgressPct] = useState(36);
   const [volumePct, setVolumePct] = useState(78);
 
+  const artistSubtitle = currentCouple
+    ? `${currentCouple.partner1Name} & ${currentCouple.partner2Name} Seçkisi`
+    : "Özel Çalma Listesi";
+
   return (
     <footer
       aria-label="Müzik Oynatıcı"
-      className="fixed bottom-0 inset-x-0 z-40 h-[66px] sm:h-[70px] bg-gradient-to-r from-[#2b0c14] via-[#3a111c] to-[#270b12] border-t border-rose-200/15 px-3 sm:px-6 lg:px-10 shadow-[0_-10px_35px_rgba(0,0,0,0.75)] flex items-center justify-between gap-3"
+      className="fixed bottom-0 inset-x-0 z-40 h-16 bg-[#18181B]/95 backdrop-blur-md border-t border-[#343438] px-4 sm:px-6 lg:px-10 flex items-center justify-between gap-4"
     >
-      {/* Left: Album Art + Track Info */}
-      <div className="flex items-center gap-3 min-w-0 w-[32%] sm:w-[26%]">
+      {/* Left: Album Art + Track Title & Artist */}
+      <div className="flex items-center gap-3 min-w-0 w-[34%] sm:w-[28%]">
         <img
           src="/images/album-art.webp"
-          alt="Bizim Şarkımız kapak görseli"
-          width={44}
-          height={44}
-          className="h-10 w-10 sm:h-11 sm:w-11 rounded-lg object-cover border border-rose-200/20 shadow-md shrink-0"
+          alt="Albüm kapağı"
+          width={40}
+          height={40}
+          className="h-10 w-10 rounded-md object-cover border border-[#343438] shrink-0"
         />
         <div className="min-w-0">
-          <div className="flex items-center gap-1.5 text-xs sm:text-[13px] font-semibold text-white truncate">
-            <span className="truncate">
-              {currentCouple?.songTitle || "Bizim Şarkımız"}
-            </span>
-            <Heart className="h-3.5 w-3.5 text-rose-200/90 shrink-0" />
+          <div className="text-[13px] font-medium text-[#F5F5F7] truncate">
+            {currentCouple?.songTitle || "Bizim Şarkımız"}
           </div>
-          <p className="text-[10px] sm:text-[11px] text-rose-100/65 truncate">
-            {currentCouple?.songSubtitle || "Sana Özel Çalma Listesi"}
-          </p>
+          <p className="text-[11px] text-[#A1A1A6] truncate">{artistSubtitle}</p>
         </div>
       </div>
 
-      {/* Center: Transport Controls + Seek Bar */}
-      <div className="flex flex-col items-center justify-center flex-1 max-w-xl">
-        <div className="flex items-center gap-4 sm:gap-5 mb-1">
+      {/* Center: Compact Spotify-Style Transport + Progress Bar */}
+      <div className="flex flex-col items-center justify-center flex-1 max-w-lg">
+        <div className="flex items-center gap-5 mb-1">
           <button
             type="button"
-            aria-label="Karıştır"
-            onClick={() => onSelectTab("muzik")}
-            className="text-rose-200/75 hover:text-white transition cursor-pointer inline-flex"
+            aria-label="Önceki"
+            onClick={() => setProgressPct(12)}
+            className="text-[#A1A1A6] hover:text-[#F5F5F7] transition-apple cursor-pointer"
           >
-            <Shuffle className="h-3.5 w-3.5" />
-          </button>
-
-          <button
-            type="button"
-            aria-label="Önceki Şarkı"
-            onClick={() => setProgressPct(15)}
-            className="text-white/90 hover:text-white transition cursor-pointer"
-          >
-            <SkipBack className="h-4 w-4 fill-white" />
+            <SkipBack className="h-3.5 w-3.5 fill-current" />
           </button>
 
           <button
             type="button"
             onClick={() => setIsPlaying((prev) => !prev)}
             aria-label={isPlaying ? "Duraklat" : "Oynat"}
-            title={isPlaying ? "Duraklat" : "Oynat"}
-            className="flex h-8 w-8 items-center justify-center rounded-full bg-[#f27c90] hover:bg-[#f78da0] text-[#280910] shadow-[0_0_16px_rgba(242,124,144,0.55)] transition cursor-pointer"
+            title="Görsel Önizleme Oynatıcısı"
+            className="flex h-7 w-7 items-center justify-center rounded-full bg-[#F5F5F7] hover:bg-white text-[#101012] transition-apple cursor-pointer"
           >
             {isPlaying ? (
-              <Play className="h-4 w-4 fill-[#280910] ml-0.5" />
+              <Pause className="h-3.5 w-3.5 fill-[#101012]" />
             ) : (
-              <Pause className="h-4 w-4 fill-[#280910]" />
+              <Play className="h-3.5 w-3.5 fill-[#101012] ml-0.5" />
             )}
           </button>
 
           <button
             type="button"
-            aria-label="Sonraki Şarkı"
-            onClick={() => setProgressPct(62)}
-            className="text-white/90 hover:text-white transition cursor-pointer"
+            aria-label="Sonraki"
+            onClick={() => setProgressPct(68)}
+            className="text-[#A1A1A6] hover:text-[#F5F5F7] transition-apple cursor-pointer"
           >
-            <SkipForward className="h-4 w-4 fill-white" />
-          </button>
-
-          <button
-            type="button"
-            aria-label="Tekrarla"
-            onClick={() => onSelectTab("muzik")}
-            className="text-rose-200/75 hover:text-white transition cursor-pointer inline-flex"
-          >
-            <Repeat className="h-3.5 w-3.5" />
+            <SkipForward className="h-3.5 w-3.5 fill-current" />
           </button>
         </div>
 
-        {/* Seek Progress Bar matching 1:24 — 3:56 */}
-        <div className="flex items-center gap-2.5 w-full max-w-[440px]">
-          <span className="text-[10px] sm:text-[11px] font-medium text-rose-100/75 tabular-nums">
-            1:24
-          </span>
+        <div className="flex items-center gap-2.5 w-full max-w-[400px]">
+          <span className="text-[11px] text-[#A1A1A6] tabular-nums">1:24</span>
           <div
             onClick={(e) => {
               const rect = e.currentTarget.getBoundingClientRect();
@@ -120,26 +95,20 @@ export default function MusicPlayerBar({ onSelectTab }: MusicPlayerBarProps) {
               );
               setProgressPct(pct);
             }}
-            className="relative h-1 flex-1 rounded-full bg-white/20 cursor-pointer"
+            className="group relative h-1 flex-1 rounded-full bg-[#343438] cursor-pointer"
           >
             <div
-              className="h-full rounded-full bg-gradient-to-r from-[#e85d75] to-[#f58fa0]"
+              className="h-full rounded-full bg-[#D88A96]"
               style={{ width: `${progressPct}%` }}
             />
-            <span
-              className="absolute top-1/2 -translate-y-1/2 -translate-x-1/2 h-2.5 w-2.5 rounded-full bg-white shadow-[0_0_8px_#ffffff]"
-              style={{ left: `${progressPct}%` }}
-            />
           </div>
-          <span className="text-[10px] sm:text-[11px] font-medium text-rose-100/75 tabular-nums">
-            3:56
-          </span>
+          <span className="text-[11px] text-[#A1A1A6] tabular-nums">3:56</span>
         </div>
       </div>
 
-      {/* Right: Volume Slider + Queue Icon */}
-      <div className="hidden sm:flex items-center justify-end gap-3 w-[26%]">
-        <Volume2 className="h-4 w-4 text-rose-100/80 shrink-0" />
+      {/* Right: Volume Level & Playlist Shortcut */}
+      <div className="hidden sm:flex items-center justify-end gap-3 w-[28%]">
+        <Volume2 className="h-4 w-4 text-[#A1A1A6] shrink-0" />
         <div
           onClick={(e) => {
             const rect = e.currentTarget.getBoundingClientRect();
@@ -149,23 +118,19 @@ export default function MusicPlayerBar({ onSelectTab }: MusicPlayerBarProps) {
             );
             setVolumePct(pct);
           }}
-          className="relative h-1 w-20 md:w-24 rounded-full bg-white/20 cursor-pointer"
+          className="relative h-1 w-20 rounded-full bg-[#343438] cursor-pointer"
         >
           <div
-            className="h-full rounded-full bg-[#f27c90]"
+            className="h-full rounded-full bg-[#F5F5F7]"
             style={{ width: `${volumePct}%` }}
-          />
-          <span
-            className="absolute top-1/2 -translate-y-1/2 -translate-x-1/2 h-3 w-3 rounded-full bg-white shadow"
-            style={{ left: `${volumePct}%` }}
           />
         </div>
         <button
           type="button"
           onClick={() => onSelectTab("muzik")}
-          aria-label="Çalma Listesi"
-          title="Müzik Listemiz"
-          className="text-rose-100/80 hover:text-white p-1 transition cursor-pointer"
+          aria-label="Müzik Listesi"
+          title="Müzik Listesi"
+          className="text-[#A1A1A6] hover:text-[#F5F5F7] p-1.5 rounded-lg hover:bg-[#222226] transition-apple cursor-pointer"
         >
           <ListMusic className="h-4 w-4" />
         </button>
