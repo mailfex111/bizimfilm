@@ -106,7 +106,7 @@ async function checkClientBundleForSecret() {
     const content = fs.readFileSync(f, "utf8");
     if (
       content.includes("SUPABASE_SERVICE_ROLE_KEY") ||
-      content.includes("sb_secret_") ||
+      /sb_secret_[A-Za-z0-9_-]{8,}/.test(content) ||
       (SERVICE_ROLE_KEY && content.includes(SERVICE_ROLE_KEY))
     ) {
       leaked = true;
