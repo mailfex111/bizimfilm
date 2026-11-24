@@ -79,6 +79,7 @@ export function useCoupleRealtime({
         case "media":
         case "playlists":
         case "playlist_tracks":
+        case "storage_usage":
           callbacksRef.current.onMediaChange();
           break;
         case "memory_books":
@@ -94,6 +95,7 @@ export function useCoupleRealtime({
           break;
         case "couple_members":
         case "couples":
+        case "profiles":
           callbacksRef.current.onAccountChange();
           break;
         default:

@@ -339,15 +339,13 @@ async function runSixUserIsolationSuite() {
   }
 
   try {
-    // Provision 6 isolated users (3 couples: A1+A2, B1+B2, C1+C2)
-    const [a1, a2, b1, b2, c1, c2] = await Promise.all([
-      createAndSignIn("a1"),
-      createAndSignIn("a2"),
-      createAndSignIn("b1"),
-      createAndSignIn("b2"),
-      createAndSignIn("c1"),
-      createAndSignIn("c2"),
-    ]);
+    // Provision 6 isolated users sequentially to avoid transient TLS burst resets
+    const a1 = await createAndSignIn("a1");
+    const a2 = await createAndSignIn("a2");
+    const b1 = await createAndSignIn("b1");
+    const b2 = await createAndSignIn("b2");
+    const c1 = await createAndSignIn("c1");
+    const c2 = await createAndSignIn("c2");
 
     // Verify signup trigger created profile & user_preferences automatically
     const { data: profA1 } = await a1.client.from("profiles").select("id, username").eq("id", a1.user.id).single();
@@ -596,7 +594,40 @@ async function runSixUserIsolationSuite() {
       !a2Deletes.some((x) => x?.id === "forged-client-event") ? "PASS" : "FAIL"
     );
 
-    // Real INSERT on notes -> delivers couple_change to A2 + user_sync notification to A2
+    // Direct API tamper test: couple member MUST NOT be able to overwrite realtime_channel_epoch!
+    const fakeEpoch = "11111111-1111-4111-8111-111111111111";
+    const { error: tamperEpochErr } = await a1.client
+      .from("couples")
+      .update({ realtime_channel_epoch: fakeEpoch })
+      .eq("id", coupleA.id);
+    const { data: afterTamper } = await a1.client
+      .from("couples")
+      .select("realtime_channel_epoch")
+      .eq("id", coupleA.id)
+      .single();
+    record(
+      "Direct API cannot modify couples.realtime_channel_epoch",
+      Boolean(tamperEpochErr) && afterTamper?.realtime_channel_epoch === epochA1 ? "PASS" : "FAIL",
+      tamperEpochErr ? tamperEpochErr.message : `VULNERABILITY: epoch changed to ${afterTamper?.realtime_channel_epoch}`
+    );
+
+    // Profile update & storage_usage live Realtime sync across partner devices
+    const preProfileCount = a2Changes.length;
+    await a1.client
+      .from("profiles")
+      .update({ display_name: `Partner A1 Updated ${runId}` })
+      .eq("id", a1.user.id);
+    await new Promise((res) => setTimeout(res, 1500));
+    const profileSyncedLive = a2Changes
+      .slice(preProfileCount)
+      .some((x) => x?.table === "profiles");
+    record(
+      "Profile changes broadcast live to partner via Private Broadcast",
+      profileSyncedLive ? "PASS" : "FAIL",
+      `received=${profileSyncedLive}`
+    );
+
+    // Trigger real INSERT on notes -> delivers couple_change to A2 + user_sync notification to A2
     const { data: noteA } = await a1.client
       .from("notes")
       .insert({ couple_id: coupleA.id, created_by: a1.user.id, title: `RealtimeNote ${runId}`, content: "Seni seviyorum" })
@@ -737,6 +768,14 @@ async function runSixUserIsolationSuite() {
       .single();
     const epochA2 = coupleAAfterLeave?.realtime_channel_epoch;
 
+    // A1 subscribes to the NEW rotated epoch channel and must receive live events while A2 on OLD channel gets 0!
+    const a1NewEpochEvents = [];
+    const a1NewEpochCh = a1.client
+      .channel(`couple:${coupleA.id}:${epochA2}`, { config: { private: true } })
+      .on("broadcast", { event: "couple_change" }, (msg) => a1NewEpochEvents.push(msg.payload))
+      .on("broadcast", { event: "couple_delete" }, (msg) => a1NewEpochEvents.push(msg.payload));
+    const a1NewEpochSt = await subscribePrivate(a1NewEpochCh);
+
     // A1 inserts and deletes a post-leave secret note while A2 keeps old WebSocket OPEN!
     const { data: postLeaveNote } = await a1.client
       .from("notes")
@@ -749,12 +788,16 @@ async function runSixUserIsolationSuite() {
     const exMemberLeakedOnOpenSocket =
       a2Changes.some((x) => x?.id === postLeaveNote?.id) ||
       a2Deletes.some((x) => x?.id === postLeaveNote?.id);
+    const activePartnerGotNewEpochEvent = a1NewEpochEvents.some(
+      (x) => x?.id === postLeaveNote?.id
+    );
 
     // Also verify ex-member A2 cannot join the NEW epoch topic
     const exRejoinNewEpoch = a2.client.channel(`couple:${coupleA.id}:${epochA2}`, { config: { private: true } });
     const exRejoinStatus = await subscribePrivate(exRejoinNewEpoch);
 
     await Promise.all([
+      a1.client.removeChannel(a1NewEpochCh),
       a2.client.removeChannel(privA2),
       a2.client.removeChannel(exRejoinNewEpoch),
     ]);
@@ -765,6 +808,11 @@ async function runSixUserIsolationSuite() {
         ? "PASS"
         : "FAIL",
       `epochRotated=${epochA2 !== epochA1}, leakedOnOpenSocket=${exMemberLeakedOnOpenSocket}, rejoinNewEpoch=${exRejoinStatus}`
+    );
+    record(
+      "Remaining active partner connects to rotated epoch channel and receives live events",
+      a1NewEpochSt === "SUBSCRIBED" && activePartnerGotNewEpochEvent ? "PASS" : "FAIL",
+      `status=${a1NewEpochSt}, received=${activePartnerGotNewEpochEvent}`
     );
 
     // 10. Signed-Out Session Isolation
