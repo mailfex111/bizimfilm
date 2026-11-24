@@ -8,7 +8,7 @@ VALUES
   ('avatars', 'avatars', FALSE, 5242880, ARRAY['image/webp', 'image/jpeg', 'image/png']),
   ('couple-photos', 'couple-photos', FALSE, 20971520, ARRAY['image/webp', 'image/jpeg', 'image/png']),
   ('couple-videos', 'couple-videos', FALSE, 52428800, ARRAY['video/mp4', 'video/webm', 'video/quicktime']),
-  ('couple-music', 'couple-music', FALSE, 26214400, ARRAY['audio/mpeg', 'audio/mp3', 'audio/mp4', 'audio/x-m4a', 'audio/wav', 'audio/ogg', 'audio/webm']),
+  ('couple-music', 'couple-music', FALSE, 26214400, ARRAY['audio/mpeg', 'audio/mp3', 'audio/mp4', 'audio/m4a', 'audio/x-m4a', 'audio/wav', 'audio/x-wav', 'audio/ogg', 'audio/webm']),
   ('book-assets', 'book-assets', FALSE, 20971520, ARRAY['image/webp', 'image/jpeg', 'image/png']),
   ('thumbnails', 'thumbnails', FALSE, 5242880, ARRAY['image/webp', 'image/jpeg', 'image/png'])
 ON CONFLICT (id) DO UPDATE SET

@@ -1478,12 +1478,12 @@ BEGIN
     RAISE EXCEPTION 'NO_COUPLE_SPACE';
   END IF;
 
-  -- Enforce that storage_path starts with caller's verified couple_id
-  IF left(p_storage_path, char_length(v_couple_id::text) + 1) <> (v_couple_id::text || '/') THEN
+  -- Enforce that storage_path starts with caller's verified couple_id and has no traversal
+  IF p_storage_path LIKE '%..%' OR left(p_storage_path, char_length(v_couple_id::text) + 1) <> (v_couple_id::text || '/') THEN
     RAISE EXCEPTION 'INVALID_STORAGE_PATH: Dosya yolu yetkisiz bir çift alanına işaret ediyor.';
   END IF;
 
-  IF p_thumbnail_path IS NOT NULL AND left(p_thumbnail_path, char_length(v_couple_id::text) + 1) <> (v_couple_id::text || '/') THEN
+  IF p_thumbnail_path IS NOT NULL AND (p_thumbnail_path LIKE '%..%' OR left(p_thumbnail_path, char_length(v_couple_id::text) + 1) <> (v_couple_id::text || '/')) THEN
     RAISE EXCEPTION 'INVALID_THUMBNAIL_PATH';
   END IF;
 
@@ -1766,7 +1766,7 @@ VALUES
   ('avatars', 'avatars', FALSE, 5242880, ARRAY['image/webp', 'image/jpeg', 'image/png']),
   ('couple-photos', 'couple-photos', FALSE, 20971520, ARRAY['image/webp', 'image/jpeg', 'image/png']),
   ('couple-videos', 'couple-videos', FALSE, 52428800, ARRAY['video/mp4', 'video/webm', 'video/quicktime']),
-  ('couple-music', 'couple-music', FALSE, 26214400, ARRAY['audio/mpeg', 'audio/mp3', 'audio/mp4', 'audio/x-m4a', 'audio/wav', 'audio/ogg', 'audio/webm']),
+  ('couple-music', 'couple-music', FALSE, 26214400, ARRAY['audio/mpeg', 'audio/mp3', 'audio/mp4', 'audio/m4a', 'audio/x-m4a', 'audio/wav', 'audio/x-wav', 'audio/ogg', 'audio/webm']),
   ('book-assets', 'book-assets', FALSE, 20971520, ARRAY['image/webp', 'image/jpeg', 'image/png']),
   ('thumbnails', 'thumbnails', FALSE, 5242880, ARRAY['image/webp', 'image/jpeg', 'image/png'])
 ON CONFLICT (id) DO UPDATE SET

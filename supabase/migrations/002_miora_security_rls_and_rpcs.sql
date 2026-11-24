@@ -1001,12 +1001,12 @@ BEGIN
     RAISE EXCEPTION 'NO_COUPLE_SPACE';
   END IF;
 
-  -- Enforce that storage_path starts with caller's verified couple_id
-  IF left(p_storage_path, char_length(v_couple_id::text) + 1) <> (v_couple_id::text || '/') THEN
+  -- Enforce that storage_path starts with caller's verified couple_id and has no traversal
+  IF p_storage_path LIKE '%..%' OR left(p_storage_path, char_length(v_couple_id::text) + 1) <> (v_couple_id::text || '/') THEN
     RAISE EXCEPTION 'INVALID_STORAGE_PATH: Dosya yolu yetkisiz bir çift alanına işaret ediyor.';
   END IF;
 
-  IF p_thumbnail_path IS NOT NULL AND left(p_thumbnail_path, char_length(v_couple_id::text) + 1) <> (v_couple_id::text || '/') THEN
+  IF p_thumbnail_path IS NOT NULL AND (p_thumbnail_path LIKE '%..%' OR left(p_thumbnail_path, char_length(v_couple_id::text) + 1) <> (v_couple_id::text || '/')) THEN
     RAISE EXCEPTION 'INVALID_THUMBNAIL_PATH';
   END IF;
 
