@@ -8,7 +8,9 @@
 -- 100% compatible with Supabase Free Plan.
 -- ============================================================================
 
--- 1. Realtime Authorization Policies on realtime.messages (Private Broadcast Only)
+-- 1. Realtime Authorization Policies on realtime.messages (Private Broadcast SELECT Only)
+-- Client-side INSERT is intentionally omitted/dropped so clients cannot forge
+-- couple_delete broadcasts; only server-side AFTER DELETE triggers emit events.
 DROP POLICY IF EXISTS "couple_broadcast_select_member" ON realtime.messages;
 CREATE POLICY "couple_broadcast_select_member"
   ON realtime.messages FOR SELECT
@@ -20,14 +22,6 @@ CREATE POLICY "couple_broadcast_select_member"
   );
 
 DROP POLICY IF EXISTS "couple_broadcast_insert_member" ON realtime.messages;
-CREATE POLICY "couple_broadcast_insert_member"
-  ON realtime.messages FOR INSERT
-  TO authenticated
-  WITH CHECK (
-    realtime.messages.extension = 'broadcast'
-    AND split_part(realtime.topic(), ':', 1) = 'couple'
-    AND public.is_couple_member(public.try_parse_uuid(split_part(realtime.topic(), ':', 2)))
-  );
 
 -- 2. Server-Side AFTER DELETE Private Broadcast Trigger Function
 -- Emits minimal non-sensitive invalidation payload to private topic `couple:<couple_id>`

@@ -7,6 +7,7 @@ export type RealtimeStatus = "connecting" | "connected" | "disconnected";
 
 interface UseCoupleRealtimeParams {
   coupleId: string | null;
+  realtimeEpoch: string | null;
   userId: string | null;
   onMediaChange: () => void;
   onBookChange: () => void;
@@ -17,15 +18,19 @@ interface UseCoupleRealtimeParams {
 }
 
 /**
- * Dual-channel couple-scoped Supabase Realtime synchronization:
- * 1. Authorized PRIVATE Broadcast channel (`couple:<couple_id>`, `private: true`)
- *    enforced by `realtime.messages` RLS (`is_couple_member`) for secure DELETE
- *    and invalidation synchronization without relying solely on REPLICA IDENTITY FULL.
- * 2. Scoped `postgres_changes` channel filtered by verified `couple_id` / `user_id`
- *    for live INSERT & UPDATE synchronization.
+ * 100% Private-Broadcast-Only Supabase Realtime Synchronization:
+ * - Couple channel: `couple:<couple_id>:<realtime_channel_epoch>` (`private: true`)
+ *   Authorized strictly by `realtime.messages` SELECT-only RLS (`can_subscribe_couple_broadcast`).
+ *   Server triggers emit all INSERT / UPDATE / DELETE invalidations (`couple_change`, `couple_delete`).
+ *   When any member leaves, the DB atomically rotates `realtime_channel_epoch`, immediately cutting off
+ *   any ex-member's already-open WebSocket from all future couple events.
+ * - Personal channel: `user:<user_id>` (`private: true`) for own notifications.
+ * - Zero public channels and zero `postgres_changes` subscriptions (100% compatible with
+ *   disabling public channel access in Supabase Realtime Settings and Free Plan).
  */
 export function useCoupleRealtime({
   coupleId,
+  realtimeEpoch,
   userId,
   onMediaChange,
   onBookChange,
@@ -57,17 +62,17 @@ export function useCoupleRealtime({
   });
 
   useEffect(() => {
-    if (!coupleId || !userId) {
+    if (!coupleId || !realtimeEpoch || !userId) {
       return;
     }
 
     let cancelled = false;
     const supabase = createClient();
-    const pgChannelName = `miora-pg-${coupleId}-${userId.slice(0, 8)}`;
-    const privateBroadcastTopic = `couple:${coupleId}`;
+    const coupleTopic = `couple:${coupleId}:${realtimeEpoch}`;
+    const userTopic = `user:${userId}`;
 
-    let pgChannel: ReturnType<typeof supabase.channel> | null = null;
-    let privateChannel: ReturnType<typeof supabase.channel> | null = null;
+    let coupleChannel: ReturnType<typeof supabase.channel> | null = null;
+    let userChannel: ReturnType<typeof supabase.channel> | null = null;
 
     const dispatchEntityRefresh = (tableName: string | undefined) => {
       switch (tableName) {
@@ -115,10 +120,17 @@ export function useCoupleRealtime({
 
       if (cancelled) return;
 
-      // 1. Private authorized Broadcast channel for secure DELETE synchronization
-      privateChannel = supabase
-        .channel(privateBroadcastTopic, {
+      // 1. Epoch-scoped private couple Broadcast channel
+      coupleChannel = supabase
+        .channel(coupleTopic, {
           config: { private: true },
+        })
+        .on("broadcast", { event: "couple_change" }, (msg) => {
+          const tableName =
+            typeof msg?.payload?.table === "string"
+              ? msg.payload.table
+              : undefined;
+          dispatchEntityRefresh(tableName);
         })
         .on("broadcast", { event: "couple_delete" }, (msg) => {
           const tableName =
@@ -127,168 +139,10 @@ export function useCoupleRealtime({
               : undefined;
           dispatchEntityRefresh(tableName);
         })
-        .on("broadcast", { event: "couple_sync" }, (msg) => {
-          const tableName =
-            typeof msg?.payload?.table === "string"
-              ? msg.payload.table
-              : undefined;
-          dispatchEntityRefresh(tableName);
+        .on("broadcast", { event: "couple_epoch_rotated" }, () => {
+          // Immediately re-verify membership & rotate to new epoch (or disconnect if removed)
+          callbacksRef.current.onAccountChange();
         })
-        .subscribe();
-
-      // 2. Scoped postgres_changes channel for live INSERT / UPDATE events
-      pgChannel = supabase
-        .channel(pgChannelName)
-        .on(
-          "postgres_changes",
-          {
-            event: "INSERT",
-            schema: "public",
-            table: "media",
-            filter: `couple_id=eq.${coupleId}`,
-          },
-          () => callbacksRef.current.onMediaChange()
-        )
-        .on(
-          "postgres_changes",
-          {
-            event: "UPDATE",
-            schema: "public",
-            table: "media",
-            filter: `couple_id=eq.${coupleId}`,
-          },
-          () => callbacksRef.current.onMediaChange()
-        )
-        .on(
-          "postgres_changes",
-          {
-            event: "INSERT",
-            schema: "public",
-            table: "memory_books",
-            filter: `couple_id=eq.${coupleId}`,
-          },
-          () => callbacksRef.current.onBookChange()
-        )
-        .on(
-          "postgres_changes",
-          {
-            event: "UPDATE",
-            schema: "public",
-            table: "memory_books",
-            filter: `couple_id=eq.${coupleId}`,
-          },
-          () => callbacksRef.current.onBookChange()
-        )
-        .on(
-          "postgres_changes",
-          {
-            event: "INSERT",
-            schema: "public",
-            table: "memory_pages",
-            filter: `couple_id=eq.${coupleId}`,
-          },
-          () => callbacksRef.current.onBookChange()
-        )
-        .on(
-          "postgres_changes",
-          {
-            event: "UPDATE",
-            schema: "public",
-            table: "memory_pages",
-            filter: `couple_id=eq.${coupleId}`,
-          },
-          () => callbacksRef.current.onBookChange()
-        )
-        .on(
-          "postgres_changes",
-          {
-            event: "INSERT",
-            schema: "public",
-            table: "memory_page_elements",
-            filter: `couple_id=eq.${coupleId}`,
-          },
-          () => callbacksRef.current.onBookChange()
-        )
-        .on(
-          "postgres_changes",
-          {
-            event: "UPDATE",
-            schema: "public",
-            table: "memory_page_elements",
-            filter: `couple_id=eq.${coupleId}`,
-          },
-          () => callbacksRef.current.onBookChange()
-        )
-        .on(
-          "postgres_changes",
-          {
-            event: "INSERT",
-            schema: "public",
-            table: "notes",
-            filter: `couple_id=eq.${coupleId}`,
-          },
-          () => callbacksRef.current.onNotesChange()
-        )
-        .on(
-          "postgres_changes",
-          {
-            event: "UPDATE",
-            schema: "public",
-            table: "notes",
-            filter: `couple_id=eq.${coupleId}`,
-          },
-          () => callbacksRef.current.onNotesChange()
-        )
-        .on(
-          "postgres_changes",
-          {
-            event: "INSERT",
-            schema: "public",
-            table: "special_dates",
-            filter: `couple_id=eq.${coupleId}`,
-          },
-          () => callbacksRef.current.onDatesChange()
-        )
-        .on(
-          "postgres_changes",
-          {
-            event: "UPDATE",
-            schema: "public",
-            table: "special_dates",
-            filter: `couple_id=eq.${coupleId}`,
-          },
-          () => callbacksRef.current.onDatesChange()
-        )
-        .on(
-          "postgres_changes",
-          {
-            event: "*",
-            schema: "public",
-            table: "notifications",
-            filter: `user_id=eq.${userId}`,
-          },
-          () => callbacksRef.current.onNotificationsChange()
-        )
-        .on(
-          "postgres_changes",
-          {
-            event: "INSERT",
-            schema: "public",
-            table: "couple_members",
-            filter: `couple_id=eq.${coupleId}`,
-          },
-          () => callbacksRef.current.onAccountChange()
-        )
-        .on(
-          "postgres_changes",
-          {
-            event: "UPDATE",
-            schema: "public",
-            table: "couples",
-            filter: `id=eq.${coupleId}`,
-          },
-          () => callbacksRef.current.onAccountChange()
-        )
         .subscribe((subStatus) => {
           if (cancelled) return;
           if (subStatus === "SUBSCRIBED") {
@@ -301,6 +155,16 @@ export function useCoupleRealtime({
             setStatus("disconnected");
           }
         });
+
+      // 2. Personal private Broadcast channel for user notifications
+      userChannel = supabase
+        .channel(userTopic, {
+          config: { private: true },
+        })
+        .on("broadcast", { event: "user_sync" }, () => {
+          callbacksRef.current.onNotificationsChange();
+        })
+        .subscribe();
     };
 
     void connect();
@@ -319,14 +183,14 @@ export function useCoupleRealtime({
     return () => {
       cancelled = true;
       window.removeEventListener("online", handleOnline);
-      if (privateChannel) {
-        void supabase.removeChannel(privateChannel);
+      if (coupleChannel) {
+        void supabase.removeChannel(coupleChannel);
       }
-      if (pgChannel) {
-        void supabase.removeChannel(pgChannel);
+      if (userChannel) {
+        void supabase.removeChannel(userChannel);
       }
     };
-  }, [coupleId, userId]);
+  }, [coupleId, realtimeEpoch, userId]);
 
-  return !coupleId || !userId ? "disconnected" : status;
+  return !coupleId || !realtimeEpoch || !userId ? "disconnected" : status;
 }

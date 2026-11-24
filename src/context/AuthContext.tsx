@@ -201,7 +201,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           supabase
             .from("couples")
             .select(
-              "id, couple_name, relationship_start_date, cover_image_path, default_track_media_id, created_by, created_at, updated_at"
+              "id, couple_name, relationship_start_date, cover_image_path, default_track_media_id, realtime_channel_epoch, created_by, created_at, updated_at"
             )
             .eq("id", myMembership.couple_id)
             .maybeSingle(),

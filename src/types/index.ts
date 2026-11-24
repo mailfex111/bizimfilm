@@ -42,6 +42,7 @@ export interface Couple {
   relationship_start_date: string | null;
   cover_image_path: string | null;
   default_track_media_id: string | null;
+  realtime_channel_epoch?: string | null;
   created_by: string | null;
   created_at: string;
   updated_at: string;

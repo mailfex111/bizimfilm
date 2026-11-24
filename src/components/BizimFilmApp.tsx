@@ -264,9 +264,10 @@ export default function BizimFilmApp() {
     };
   }, [couple, activeBookId, loadPages]);
 
-  // Scoped Realtime Synchronization between partners
+  // Scoped Private-Broadcast-Only Realtime Synchronization between partners
   const realtimeStatus = useCoupleRealtime({
     coupleId: couple?.id || null,
+    realtimeEpoch: couple?.realtime_channel_epoch || null,
     userId: user?.id || null,
     onMediaChange: () => {
       void loadMedia();

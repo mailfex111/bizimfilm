@@ -231,25 +231,42 @@ async function checkLiveSchemaBucketsAndAnonSecurity() {
       : `Public: ${publicBuckets.join(",")}; OpenUpload: ${openUploadBuckets.join(",")}`
   );
 
-  // 4. Verify Realtime WebSocket reachability
-  const wsStatus = await new Promise((resolve) => {
-    const ch = anon.channel(`miora-probe-${Date.now()}`);
+  // 4. Verify Realtime Anonymous Access Blocked on Private Channels
+  const anonPrivStatus = await new Promise((resolve) => {
+    const ch = anon.channel("couple:00000000-0000-0000-0000-000000000000:00000000-0000-0000-0000-000000000000", {
+      config: { private: true },
+    });
     const timer = setTimeout(() => {
       anon.removeChannel(ch).finally(() => resolve("TIMEOUT"));
     }, 6000);
-    ch.subscribe((status) => {
+    ch.subscribe((status, err) => {
       if (status === "SUBSCRIBED" || status === "CHANNEL_ERROR" || status === "TIMED_OUT") {
         clearTimeout(timer);
-        anon.removeChannel(ch).finally(() => resolve(status));
+        anon.removeChannel(ch).finally(() => resolve(err ? `${status}:${err.message}` : status));
       }
     });
   });
 
   record(
-    "Supabase Realtime WebSocket connectivity",
-    wsStatus === "SUBSCRIBED" ? "PASS" : "FAIL",
-    `Channel status: ${wsStatus}`
+    "Anonymous Realtime private channel subscription blocked",
+    anonPrivStatus.startsWith("CHANNEL_ERROR") ? "PASS" : "FAIL",
+    `Channel status: ${anonPrivStatus}`
   );
+
+  // 4b. Check whether public Realtime channels are disabled (informational/hardening check)
+  const anonPubStatus = await new Promise((resolve) => {
+    const ch = anon.channel(`miora-public-probe-${Date.now()}`);
+    const timer = setTimeout(() => {
+      anon.removeChannel(ch).finally(() => resolve("TIMEOUT"));
+    }, 5000);
+    ch.subscribe((status, err) => {
+      if (status === "SUBSCRIBED" || status === "CHANNEL_ERROR" || status === "TIMED_OUT") {
+        clearTimeout(timer);
+        anon.removeChannel(ch).finally(() => resolve(err ? `${status}:${err.message}` : status));
+      }
+    });
+  });
+  console.log(`[INFO] Supabase Realtime Public Channel Access setting: ${anonPubStatus === "SUBSCRIBED" ? "ENABLED (recommend turning OFF 'Allow public access' in Dashboard -> Realtime -> Settings)" : `DISABLED (${anonPubStatus})`}`);
 
   return true;
 }
@@ -487,62 +504,14 @@ async function runSixUserIsolationSuite() {
     });
     record("Memory Book optimistic concurrency prevents silent overwrite", !v2Err && savedV2?.version === 2 && Boolean(staleErr) ? "PASS" : "FAIL", v2Err?.message || (staleErr ? `v1->v2 OK, stale blocked: ${staleErr.message}` : "stale not blocked"));
 
-    // 6. Live 2-Device Realtime Synchronization + Cross-Couple Realtime Isolation
-    let a2ReceivedNote = false;
-    let b1ReceivedNote = false;
-    const chA2 = a2.client
-      .channel(`rt-a2-${runId}`)
-      .on("postgres_changes", { event: "INSERT", schema: "public", table: "notes", filter: `couple_id=eq.${coupleA.id}` }, () => {
-        a2ReceivedNote = true;
-      });
-    const chB1 = b1.client
-      .channel(`rt-b1-${runId}`)
-      .on("postgres_changes", { event: "INSERT", schema: "public", table: "notes" }, (payload) => {
-        if (payload.new?.couple_id === coupleA.id) b1ReceivedNote = true;
-      });
-
-    const [stA2, stB1] = await Promise.all([
-      subscribePostgresReady(chA2, 8000),
-      subscribePostgresReady(chB1, 8000),
-    ]);
-    await new Promise((res) => setTimeout(res, 400));
-
-    const { data: noteA } = await a1.client
-      .from("notes")
-      .insert({ couple_id: coupleA.id, created_by: a1.user.id, title: `RealtimeNote ${runId}`, content: "Seni seviyorum" })
-      .select("id")
+    // 6. 100% Private Broadcast Realtime Sync, Forged-Send Block & Raw postgres_changes DELETE Leak Prevention (Migration 007)
+    const { data: coupleAFresh } = await a1.client
+      .from("couples")
+      .select("id, realtime_channel_epoch")
+      .eq("id", coupleA.id)
       .single();
-
-    await new Promise((res) => setTimeout(res, 2500));
-    await Promise.all([a2.client.removeChannel(chA2), b1.client.removeChannel(chB1)]);
-
-    record("Realtime sync delivers live note from Partner A1 to Partner A2", a2ReceivedNote ? "PASS" : "FAIL", `chA2=${stA2}, received=${a2ReceivedNote}`);
-    record("Realtime RLS prevents Couple B from receiving Couple A events", stB1 === "SUBSCRIBED" && !b1ReceivedNote ? "PASS" : "FAIL", `chB1=${stB1}, leaked=${b1ReceivedNote}`);
-
-    // 6a. Realtime Private Broadcast Authorization for DELETE Synchronization (Migration 006)
-    const { data: tempDelNote } = await a1.client
-      .from("notes")
-      .insert({ couple_id: coupleA.id, created_by: a1.user.id, title: `DeleteSync ${runId}`, content: "To be deleted" })
-      .select("id")
-      .single();
-
-    let a2ReceivedPrivateDelete = false;
-    let b1ReceivedPrivateDelete = false;
-    const privateTopicA = `couple:${coupleA.id}`;
-
-    const privA2 = a2.client
-      .channel(privateTopicA, { config: { private: true } })
-      .on("broadcast", { event: "couple_delete" }, (msg) => {
-        if (msg?.payload?.table === "notes" && msg?.payload?.id === tempDelNote?.id) {
-          a2ReceivedPrivateDelete = true;
-        }
-      });
-
-    const privB1 = b1.client
-      .channel(privateTopicA, { config: { private: true } })
-      .on("broadcast", { event: "couple_delete" }, () => {
-        b1ReceivedPrivateDelete = true;
-      });
+    const epochA1 = coupleAFresh?.realtime_channel_epoch;
+    const privateTopicA = `couple:${coupleA.id}:${epochA1}`;
 
     const subscribePrivate = (ch) =>
       new Promise((resolve) => {
@@ -561,37 +530,116 @@ async function runSixUserIsolationSuite() {
         });
       });
 
-    const [privStA2, privStB1] = await Promise.all([
+    const a2Changes = [];
+    const a2Deletes = [];
+    let a2UserNotifSync = false;
+    let b1PrivateLeak = false;
+    let b1RawPgDeleteLeak = false;
+
+    const privA1 = a1.client.channel(privateTopicA, { config: { private: true } });
+    const privA2 = a2.client
+      .channel(privateTopicA, { config: { private: true } })
+      .on("broadcast", { event: "couple_change" }, (msg) => a2Changes.push(msg.payload))
+      .on("broadcast", { event: "couple_delete" }, (msg) => a2Deletes.push(msg.payload));
+
+    const userPrivA2 = a2.client
+      .channel(`user:${a2.user.id}`, { config: { private: true } })
+      .on("broadcast", { event: "user_sync" }, () => {
+        a2UserNotifSync = true;
+      });
+
+    const privB1Attack = b1.client
+      .channel(privateTopicA, { config: { private: true } })
+      .on("broadcast", { event: "couple_change" }, () => { b1PrivateLeak = true; })
+      .on("broadcast", { event: "couple_delete" }, () => { b1PrivateLeak = true; });
+
+    const b1UserAttack = b1.client.channel(`user:${a2.user.id}`, { config: { private: true } });
+
+    // Raw unfiltered postgres_changes DELETE subscription attack by Couple B (must receive 0 events!)
+    const b1RawPgDelete = b1.client
+      .channel(`b1-pg-del-attack-${runId}`, { config: { private: true } })
+      .on("postgres_changes", { event: "DELETE", schema: "public", table: "notes" }, () => {
+        b1RawPgDeleteLeak = true;
+      });
+    const b1RawPgDeletePub = b1.client
+      .channel(`b1-pg-del-pub-${runId}`)
+      .on("postgres_changes", { event: "DELETE", schema: "public", table: "notes" }, () => {
+        b1RawPgDeleteLeak = true;
+      });
+
+    const [privStA1, privStA2, userStA2, privStB1, b1UserSt] = await Promise.all([
+      subscribePrivate(privA1),
       subscribePrivate(privA2),
-      subscribePrivate(privB1),
+      subscribePrivate(userPrivA2),
+      subscribePrivate(privB1Attack),
+      subscribePrivate(b1UserAttack),
+    ]);
+    await Promise.all([
+      subscribePostgresReady(b1RawPgDelete, 4000),
+      subscribePostgresReady(b1RawPgDeletePub, 4000),
     ]);
 
-    record(
-      "Partner A2 authorized on Private Broadcast channel (couple:<id>)",
-      privStA2 === "SUBSCRIBED" ? "PASS" : "FAIL",
-      `status=${privStA2}`
-    );
-    record(
-      "Couple B rejected from Couple A Private Broadcast channel (Realtime Auth RLS)",
-      privStB1.startsWith("CHANNEL_ERROR") ? "PASS" : "FAIL",
-      `status=${privStB1}`
-    );
+    record("Partner A2 authorized on epoch-scoped Private Broadcast channel", privStA2 === "SUBSCRIBED" && Boolean(epochA1) ? "PASS" : "FAIL", `status=${privStA2}`);
+    record("Couple B rejected from Couple A Private Broadcast channel", privStB1.startsWith("CHANNEL_ERROR") ? "PASS" : "FAIL", `status=${privStB1}`);
+    record("Personal notification Private Broadcast channel isolates users", userStA2 === "SUBSCRIBED" && b1UserSt.startsWith("CHANNEL_ERROR") ? "PASS" : "FAIL", `a2=${userStA2}, b1=${b1UserSt}`);
 
-    // Trigger real DELETE on Couple A's note -> private broadcast must deliver to A2 and NEVER to B1
+    // Forged client-side Broadcast send from Partner A1 must NOT be delivered (no INSERT policy!)
     await new Promise((res) => setTimeout(res, 300));
-    await a1.client.from("notes").delete().eq("id", tempDelNote.id);
-    await new Promise((res) => setTimeout(res, 2500));
-    await Promise.all([a2.client.removeChannel(privA2), b1.client.removeChannel(privB1)]);
+    await privA1.send({
+      type: "broadcast",
+      event: "couple_delete",
+      payload: { table: "notes", action: "DELETE", id: "forged-client-event" },
+    });
+    await new Promise((res) => setTimeout(res, 1200));
+    record(
+      "Client-forged Broadcast send blocked (no realtime.messages INSERT policy)",
+      !a2Deletes.some((x) => x?.id === "forged-client-event") ? "PASS" : "FAIL"
+    );
 
+    // Real INSERT on notes -> delivers couple_change to A2 + user_sync notification to A2
+    const { data: noteA } = await a1.client
+      .from("notes")
+      .insert({ couple_id: coupleA.id, created_by: a1.user.id, title: `RealtimeNote ${runId}`, content: "Seni seviyorum" })
+      .select("id")
+      .single();
+
+    // Real temp note + DELETE -> delivers couple_delete to A2 and 0 leaks to B1 (Broadcast + raw postgres_changes)
+    const { data: tempDelNote } = await a1.client
+      .from("notes")
+      .insert({ couple_id: coupleA.id, created_by: a1.user.id, title: `DeleteSync ${runId}`, content: "To be deleted" })
+      .select("id")
+      .single();
+    await a1.client.from("notes").delete().eq("id", tempDelNote.id);
+
+    await new Promise((res) => setTimeout(res, 2500));
+
+    record(
+      "Private Broadcast delivers live INSERT event from Partner A1 to Partner A2",
+      a2Changes.some((x) => x?.table === "notes" && x?.id === noteA?.id) ? "PASS" : "FAIL"
+    );
     record(
       "Private Broadcast delivers live DELETE event from Partner A1 to Partner A2",
-      a2ReceivedPrivateDelete ? "PASS" : "FAIL",
-      `received=${a2ReceivedPrivateDelete}`
+      a2Deletes.some((x) => x?.table === "notes" && x?.id === tempDelNote?.id) ? "PASS" : "FAIL"
     );
     record(
-      "Couple B receives 0 DELETE events from Couple A Private Broadcast",
-      privStB1.startsWith("CHANNEL_ERROR") && !b1ReceivedPrivateDelete ? "PASS" : "FAIL"
+      "Personal Private Broadcast delivers live notification event to Partner A2",
+      a2UserNotifSync ? "PASS" : "FAIL"
     );
+    record(
+      "Raw unfiltered postgres_changes DELETE leaks 0 events to Couple B",
+      !b1RawPgDeleteLeak && !b1PrivateLeak ? "PASS" : "FAIL",
+      `pgLeak=${b1RawPgDeleteLeak}, privLeak=${b1PrivateLeak}`
+    );
+
+    await Promise.all([
+      a1.client.removeChannel(privA1),
+      a2.client.removeChannel(userPrivA2),
+      b1.client.removeChannel(privB1Attack),
+      b1.client.removeChannel(b1UserAttack),
+      b1.client.removeChannel(b1RawPgDelete),
+      b1.client.removeChannel(b1RawPgDeletePub),
+    ]);
+    // Keep privA2 intentionally OPEN to test server-side epoch rotation cut-off in step 9c!
 
     // 6b. Special Dates CRUD & Cross-Couple Isolation
     const { data: sdA, error: sdErr } = await a1.client
@@ -673,6 +721,50 @@ async function runSixUserIsolationSuite() {
       "Deleting media accurately reclaims couple storage quota",
       reclaimed ? "PASS" : "FAIL",
       `before=${beforeDel?.[0]?.total_used_bytes}B -> after=${afterDel?.[0]?.total_used_bytes}B`
+    );
+
+    // 9c. Ex-Member Open WebSocket Cut-Off via Server-Side Channel Epoch Rotation!
+    a2Changes.length = 0;
+    a2Deletes.length = 0;
+    await a2.client.rpc("leave_couple_space");
+    await new Promise((res) => setTimeout(res, 600));
+
+    // Verify epoch actually rotated for A1
+    const { data: coupleAAfterLeave } = await a1.client
+      .from("couples")
+      .select("realtime_channel_epoch")
+      .eq("id", coupleA.id)
+      .single();
+    const epochA2 = coupleAAfterLeave?.realtime_channel_epoch;
+
+    // A1 inserts and deletes a post-leave secret note while A2 keeps old WebSocket OPEN!
+    const { data: postLeaveNote } = await a1.client
+      .from("notes")
+      .insert({ couple_id: coupleA.id, created_by: a1.user.id, title: `PostLeaveSecret ${runId}`, content: "Ex-member must NOT see" })
+      .select("id")
+      .single();
+    await a1.client.from("notes").delete().eq("id", postLeaveNote.id);
+    await new Promise((res) => setTimeout(res, 2000));
+
+    const exMemberLeakedOnOpenSocket =
+      a2Changes.some((x) => x?.id === postLeaveNote?.id) ||
+      a2Deletes.some((x) => x?.id === postLeaveNote?.id);
+
+    // Also verify ex-member A2 cannot join the NEW epoch topic
+    const exRejoinNewEpoch = a2.client.channel(`couple:${coupleA.id}:${epochA2}`, { config: { private: true } });
+    const exRejoinStatus = await subscribePrivate(exRejoinNewEpoch);
+
+    await Promise.all([
+      a2.client.removeChannel(privA2),
+      a2.client.removeChannel(exRejoinNewEpoch),
+    ]);
+
+    record(
+      "Channel epoch rotates on member leave and cuts off ex-member's already-open WebSocket",
+      Boolean(epochA2) && epochA2 !== epochA1 && !exMemberLeakedOnOpenSocket && exRejoinStatus.startsWith("CHANNEL_ERROR")
+        ? "PASS"
+        : "FAIL",
+      `epochRotated=${epochA2 !== epochA1}, leakedOnOpenSocket=${exMemberLeakedOnOpenSocket}, rejoinNewEpoch=${exRejoinStatus}`
     );
 
     // 10. Signed-Out Session Isolation
