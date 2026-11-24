@@ -1016,6 +1016,12 @@ BEGIN
   WHERE couple_id = v_couple_id
   FOR UPDATE;
 
+  IF v_usage.couple_id IS NULL THEN
+    INSERT INTO public.storage_usage (couple_id, used_bytes, quota_bytes)
+    VALUES (v_couple_id, 0, 524288000)
+    RETURNING * INTO v_usage;
+  END IF;
+
   IF p_reservation_id IS NOT NULL THEN
     DELETE FROM public.storage_quota_reservations
     WHERE id = p_reservation_id
@@ -1239,6 +1245,10 @@ BEGIN
   LIMIT 40;
 END;
 $$;
+
+-- Revoke direct RPC access on internal trigger/helper functions (prevents spoofing)
+REVOKE ALL ON FUNCTION public.notify_partner_event(UUID, UUID, TEXT, TEXT, TEXT) FROM PUBLIC;
+REVOKE ALL ON FUNCTION public.notify_partner_event(UUID, UUID, TEXT, TEXT, TEXT) FROM anon, authenticated;
 
 -- Restrict RPC execute privileges strictly to authenticated users
 REVOKE ALL ON FUNCTION public.create_couple_space(TEXT, DATE) FROM PUBLIC;

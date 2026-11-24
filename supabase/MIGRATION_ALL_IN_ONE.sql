@@ -14,6 +14,7 @@ CREATE OR REPLACE FUNCTION public.try_parse_uuid(input_text TEXT)
 RETURNS UUID
 LANGUAGE plpgsql
 IMMUTABLE
+SET search_path = public, pg_temp
 AS $$
 BEGIN
   IF input_text IS NULL THEN
@@ -31,6 +32,7 @@ $$;
 CREATE OR REPLACE FUNCTION public.set_updated_at()
 RETURNS TRIGGER
 LANGUAGE plpgsql
+SET search_path = public, pg_temp
 AS $$
 BEGIN
   NEW.updated_at = NOW();
@@ -187,6 +189,7 @@ CREATE UNIQUE INDEX IF NOT EXISTS idx_media_couple_dedup_hash
 CREATE OR REPLACE FUNCTION public.enforce_couple_default_track_owner()
 RETURNS TRIGGER
 LANGUAGE plpgsql
+SET search_path = public, pg_temp
 AS $$
 BEGIN
   IF NEW.default_track_media_id IS NOT NULL THEN
@@ -469,7 +472,6 @@ CREATE TABLE IF NOT EXISTS public.storage_quota_reservations (
 
 CREATE INDEX IF NOT EXISTS idx_storage_reservations_couple_expiry
   ON public.storage_quota_reservations (couple_id, expires_at);
-
 
 -- ============================================================================
 
@@ -1491,6 +1493,12 @@ BEGIN
   WHERE couple_id = v_couple_id
   FOR UPDATE;
 
+  IF v_usage.couple_id IS NULL THEN
+    INSERT INTO public.storage_usage (couple_id, used_bytes, quota_bytes)
+    VALUES (v_couple_id, 0, 524288000)
+    RETURNING * INTO v_usage;
+  END IF;
+
   IF p_reservation_id IS NOT NULL THEN
     DELETE FROM public.storage_quota_reservations
     WHERE id = p_reservation_id
@@ -1715,6 +1723,10 @@ BEGIN
 END;
 $$;
 
+-- Revoke direct RPC access on internal trigger/helper functions (prevents spoofing)
+REVOKE ALL ON FUNCTION public.notify_partner_event(UUID, UUID, TEXT, TEXT, TEXT) FROM PUBLIC;
+REVOKE ALL ON FUNCTION public.notify_partner_event(UUID, UUID, TEXT, TEXT, TEXT) FROM anon, authenticated;
+
 -- Restrict RPC execute privileges strictly to authenticated users
 REVOKE ALL ON FUNCTION public.create_couple_space(TEXT, DATE) FROM PUBLIC;
 REVOKE ALL ON FUNCTION public.create_couple_invite(INT) FROM PUBLIC;
@@ -1741,7 +1753,6 @@ GRANT EXECUTE ON FUNCTION public.delete_media_and_reclaim_quota(UUID) TO authent
 GRANT EXECUTE ON FUNCTION public.get_couple_storage_breakdown() TO authenticated;
 GRANT EXECUTE ON FUNCTION public.save_memory_page_optimistic(UUID, INT, TEXT, TEXT, TEXT, TEXT) TO authenticated;
 GRANT EXECUTE ON FUNCTION public.search_couple_content(TEXT) TO authenticated;
-
 
 -- ============================================================================
 

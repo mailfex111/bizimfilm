@@ -14,6 +14,7 @@ CREATE OR REPLACE FUNCTION public.try_parse_uuid(input_text TEXT)
 RETURNS UUID
 LANGUAGE plpgsql
 IMMUTABLE
+SET search_path = public, pg_temp
 AS $$
 BEGIN
   IF input_text IS NULL THEN
@@ -31,6 +32,7 @@ $$;
 CREATE OR REPLACE FUNCTION public.set_updated_at()
 RETURNS TRIGGER
 LANGUAGE plpgsql
+SET search_path = public, pg_temp
 AS $$
 BEGIN
   NEW.updated_at = NOW();
@@ -187,6 +189,7 @@ CREATE UNIQUE INDEX IF NOT EXISTS idx_media_couple_dedup_hash
 CREATE OR REPLACE FUNCTION public.enforce_couple_default_track_owner()
 RETURNS TRIGGER
 LANGUAGE plpgsql
+SET search_path = public, pg_temp
 AS $$
 BEGIN
   IF NEW.default_track_media_id IS NOT NULL THEN
