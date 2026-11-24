@@ -519,6 +519,80 @@ async function runSixUserIsolationSuite() {
     record("Realtime sync delivers live note from Partner A1 to Partner A2", a2ReceivedNote ? "PASS" : "FAIL", `chA2=${stA2}, received=${a2ReceivedNote}`);
     record("Realtime RLS prevents Couple B from receiving Couple A events", stB1 === "SUBSCRIBED" && !b1ReceivedNote ? "PASS" : "FAIL", `chB1=${stB1}, leaked=${b1ReceivedNote}`);
 
+    // 6a. Realtime Private Broadcast Authorization for DELETE Synchronization (Migration 006)
+    const { data: tempDelNote } = await a1.client
+      .from("notes")
+      .insert({ couple_id: coupleA.id, created_by: a1.user.id, title: `DeleteSync ${runId}`, content: "To be deleted" })
+      .select("id")
+      .single();
+
+    let a2ReceivedPrivateDelete = false;
+    let b1ReceivedPrivateDelete = false;
+    const privateTopicA = `couple:${coupleA.id}`;
+
+    const privA2 = a2.client
+      .channel(privateTopicA, { config: { private: true } })
+      .on("broadcast", { event: "couple_delete" }, (msg) => {
+        if (msg?.payload?.table === "notes" && msg?.payload?.id === tempDelNote?.id) {
+          a2ReceivedPrivateDelete = true;
+        }
+      });
+
+    const privB1 = b1.client
+      .channel(privateTopicA, { config: { private: true } })
+      .on("broadcast", { event: "couple_delete" }, () => {
+        b1ReceivedPrivateDelete = true;
+      });
+
+    const subscribePrivate = (ch) =>
+      new Promise((resolve) => {
+        let done = false;
+        const finish = (s) => {
+          if (done) return;
+          done = true;
+          clearTimeout(t);
+          resolve(s);
+        };
+        const t = setTimeout(() => finish("TIMEOUT"), 6000);
+        ch.subscribe((s, err) => {
+          if (s === "SUBSCRIBED" || s === "CHANNEL_ERROR" || s === "TIMED_OUT" || s === "CLOSED") {
+            finish(err ? `${s}:${err.message}` : s);
+          }
+        });
+      });
+
+    const [privStA2, privStB1] = await Promise.all([
+      subscribePrivate(privA2),
+      subscribePrivate(privB1),
+    ]);
+
+    record(
+      "Partner A2 authorized on Private Broadcast channel (couple:<id>)",
+      privStA2 === "SUBSCRIBED" ? "PASS" : "FAIL",
+      `status=${privStA2}`
+    );
+    record(
+      "Couple B rejected from Couple A Private Broadcast channel (Realtime Auth RLS)",
+      privStB1.startsWith("CHANNEL_ERROR") ? "PASS" : "FAIL",
+      `status=${privStB1}`
+    );
+
+    // Trigger real DELETE on Couple A's note -> private broadcast must deliver to A2 and NEVER to B1
+    await new Promise((res) => setTimeout(res, 300));
+    await a1.client.from("notes").delete().eq("id", tempDelNote.id);
+    await new Promise((res) => setTimeout(res, 2500));
+    await Promise.all([a2.client.removeChannel(privA2), b1.client.removeChannel(privB1)]);
+
+    record(
+      "Private Broadcast delivers live DELETE event from Partner A1 to Partner A2",
+      a2ReceivedPrivateDelete ? "PASS" : "FAIL",
+      `received=${a2ReceivedPrivateDelete}`
+    );
+    record(
+      "Couple B receives 0 DELETE events from Couple A Private Broadcast",
+      privStB1.startsWith("CHANNEL_ERROR") && !b1ReceivedPrivateDelete ? "PASS" : "FAIL"
+    );
+
     // 6b. Special Dates CRUD & Cross-Couple Isolation
     const { data: sdA, error: sdErr } = await a1.client
       .from("special_dates")
