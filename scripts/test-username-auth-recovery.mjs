@@ -399,7 +399,11 @@ async function run() {
     }
     // Clean temporary test rate-limit keys if table exists
     if (rateLimitKeysUsed.length > 0) {
-      await admin.from("auth_rate_limits").delete().in("bucket_key", rateLimitKeysUsed).catch(() => {});
+      try {
+        await admin.from("auth_rate_limits").delete().in("bucket_key", rateLimitKeysUsed);
+      } catch {
+        // Table may not exist yet before Migration 010
+      }
     }
     const { data: check } = await admin.auth.admin.listUsers({ perPage: 200 });
     const remaining = (check?.users || []).filter((u) => createdUserIds.includes(u.id));
