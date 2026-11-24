@@ -1,6 +1,7 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { createServerSupabaseClient } from "@/lib/supabase/server";
 import { createServiceRoleClient } from "@/lib/supabase/admin";
+import { checkDistributedRateLimit, extractClientIp } from "@/lib/rateLimit";
 import {
   generateInternalAuthEmail,
   generateRecoveryCodes,
@@ -8,36 +9,28 @@ import {
   RECOVERY_CODE_COUNT,
 } from "@/lib/recoveryCodes";
 
-// Sliding-window rate limit per IP (8 signups per 15 minutes)
-const RATE_WINDOW_MS = 15 * 60 * 1000;
-const RATE_MAX_SIGNUPS = 8;
-const signupLog = new Map<string, number[]>();
-
-function isRateLimited(ip: string): boolean {
-  const now = Date.now();
-  const prev = (signupLog.get(ip) || []).filter((ts) => now - ts < RATE_WINDOW_MS);
-  if (prev.length >= RATE_MAX_SIGNUPS) {
-    signupLog.set(ip, prev);
-    return true;
-  }
-  prev.push(now);
-  signupLog.set(ip, prev);
-  return false;
-}
+const SIGNUP_MAX_ATTEMPTS = 8;
+const SIGNUP_WINDOW_SECONDS = 15 * 60;
 
 export async function POST(request: NextRequest) {
-  const ip =
-    request.headers.get("x-forwarded-for")?.split(",")[0]?.trim() ||
-    request.headers.get("x-real-ip") ||
-    "unknown";
+  const ip = extractClientIp(request.headers);
 
-  if (isRateLimited(ip)) {
+  const ipDecision = await checkDistributedRateLimit(
+    `signup:ip:${ip}`,
+    SIGNUP_MAX_ATTEMPTS,
+    SIGNUP_WINDOW_SECONDS
+  );
+
+  if (!ipDecision.allowed) {
     return NextResponse.json(
       {
         error:
           "Çok fazla kayıt denemesi yaptınız. Lütfen birkaç dakika bekleyip tekrar deneyin.",
       },
-      { status: 429 }
+      {
+        status: 429,
+        headers: { "Retry-After": String(ipDecision.retryAfterSeconds) },
+      }
     );
   }
 
@@ -100,7 +93,7 @@ export async function POST(request: NextRequest) {
     );
   }
 
-  // 1. Check case-insensitive username uniqueness before creating auth user
+  // 1. Pre-check case-insensitive username uniqueness before creating auth user
   const { data: existingProfile } = await admin
     .from("profiles")
     .select("id")
@@ -138,10 +131,18 @@ export async function POST(request: NextRequest) {
 
   const newUserId = created.user.id;
 
+  const cleanupOrphanAuthUser = async () => {
+    try {
+      await admin.auth.admin.deleteUser(newUserId);
+    } catch {
+      // Best-effort orphan cleanup
+    }
+  };
+
   try {
     // 3. Enforce DB-level atomic username uniqueness against concurrent signup races:
     // If handle_new_auth_user trigger had to append a random suffix because another
-    // concurrent request claimed `username` first, reject cleanly & roll back auth user.
+    // concurrent request claimed `username` first, reject cleanly & delete orphan auth user.
     const { data: createdProfile } = await admin
       .from("profiles")
       .select("username")
@@ -155,7 +156,7 @@ export async function POST(request: NextRequest) {
         display_name: displayName,
       });
       if (insertProfErr) {
-        await admin.auth.admin.deleteUser(newUserId);
+        await cleanupOrphanAuthUser();
         return NextResponse.json(
           {
             error:
@@ -165,7 +166,7 @@ export async function POST(request: NextRequest) {
         );
       }
     } else if (createdProfile.username.toLowerCase() !== username) {
-      await admin.auth.admin.deleteUser(newUserId);
+      await cleanupOrphanAuthUser();
       return NextResponse.json(
         {
           error:
@@ -175,7 +176,7 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // 4. Generate 6 single-use recovery codes (store ONLY salted SHA-256 hashes!)
+    // 4. Generate 6 single-use recovery codes (store ONLY salted SHA-256 hashes)
     const generated = generateRecoveryCodes(RECOVERY_CODE_COUNT);
     const { error: codeInsertErr } = await admin
       .from("account_recovery_codes")
@@ -188,11 +189,11 @@ export async function POST(request: NextRequest) {
       );
 
     if (codeInsertErr) {
-      await admin.auth.admin.deleteUser(newUserId);
+      await cleanupOrphanAuthUser();
       return NextResponse.json(
         {
           error:
-            "Kurtarma kodları oluşturulamadı. Lütfen veritabanı migration 009'un uygulandığından emin olun.",
+            "Kurtarma kodları oluşturulamadı. Lütfen tekrar deneyin.",
         },
         { status: 500 }
       );
@@ -206,8 +207,9 @@ export async function POST(request: NextRequest) {
     });
 
     if (signInErr) {
+      await cleanupOrphanAuthUser();
       return NextResponse.json(
-        { error: "Hesabınız oluşturuldu ancak oturum açılamadı. Giriş yapmayı deneyin." },
+        { error: "Oturum başlatılamadı. Lütfen tekrar deneyin." },
         { status: 500 }
       );
     }
@@ -221,7 +223,7 @@ export async function POST(request: NextRequest) {
       { status: 201 }
     );
   } catch {
-    await admin.auth.admin.deleteUser(newUserId).catch(() => {});
+    await cleanupOrphanAuthUser();
     return NextResponse.json(
       { error: "Kayıt işlemi sırasında beklenmeyen bir hata oluştu." },
       { status: 500 }

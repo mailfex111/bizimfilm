@@ -469,6 +469,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     if (error) {
       return { ok: false, error: error.message };
     }
+    // Revoke all other device sessions immediately after password change
+    await supabase.auth.signOut({ scope: "others" }).catch(() => {});
     return { ok: true };
   };
 

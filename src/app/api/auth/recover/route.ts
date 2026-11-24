@@ -1,5 +1,8 @@
 import { NextResponse, type NextRequest } from "next/server";
+import { createClient } from "@supabase/supabase-js";
 import { createServiceRoleClient } from "@/lib/supabase/admin";
+import { getSupabasePublicConfig } from "@/lib/supabase/config";
+import { checkDistributedRateLimit, extractClientIp } from "@/lib/rateLimit";
 import {
   hashRecoveryCode,
   isValidUsername,
@@ -7,37 +10,28 @@ import {
   verifyRecoveryCodeHash,
 } from "@/lib/recoveryCodes";
 
-// Strict brute-force protection: max 5 recovery attempts per 15 min per IP or username
-const RATE_WINDOW_MS = 15 * 60 * 1000;
-const RATE_MAX_ATTEMPTS = 5;
-const ipAttempts = new Map<string, number[]>();
-const userAttempts = new Map<string, number[]>();
-
-function hitLimit(store: Map<string, number[]>, key: string): boolean {
-  const now = Date.now();
-  const prev = (store.get(key) || []).filter((ts) => now - ts < RATE_WINDOW_MS);
-  if (prev.length >= RATE_MAX_ATTEMPTS) {
-    store.set(key, prev);
-    return true;
-  }
-  prev.push(now);
-  store.set(key, prev);
-  return false;
-}
+const RECOVER_MAX_ATTEMPTS = 5;
+const RECOVER_WINDOW_SECONDS = 15 * 60;
 
 export async function POST(request: NextRequest) {
-  const ip =
-    request.headers.get("x-forwarded-for")?.split(",")[0]?.trim() ||
-    request.headers.get("x-real-ip") ||
-    "unknown";
+  const ip = extractClientIp(request.headers);
 
-  if (hitLimit(ipAttempts, ip)) {
+  const ipDecision = await checkDistributedRateLimit(
+    `recover:ip:${ip}`,
+    RECOVER_MAX_ATTEMPTS,
+    RECOVER_WINDOW_SECONDS
+  );
+
+  if (!ipDecision.allowed) {
     return NextResponse.json(
       {
         error:
           "Çok fazla kurtarma denemesi yaptınız. Güvenliğiniz için lütfen 15 dakika sonra tekrar deneyin.",
       },
-      { status: 429 }
+      {
+        status: 429,
+        headers: { "Retry-After": String(ipDecision.retryAfterSeconds) },
+      }
     );
   }
 
@@ -75,13 +69,22 @@ export async function POST(request: NextRequest) {
     );
   }
 
-  if (hitLimit(userAttempts, username)) {
+  const userDecision = await checkDistributedRateLimit(
+    `recover:user:${username}`,
+    RECOVER_MAX_ATTEMPTS,
+    RECOVER_WINDOW_SECONDS
+  );
+
+  if (!userDecision.allowed) {
     return NextResponse.json(
       {
         error:
           "Bu hesap için çok fazla kurtarma denemesi yapıldı. Lütfen 15 dakika sonra tekrar deneyin.",
       },
-      { status: 429 }
+      {
+        status: 429,
+        headers: { "Retry-After": String(userDecision.retryAfterSeconds) },
+      }
     );
   }
 
@@ -122,7 +125,6 @@ export async function POST(request: NextRequest) {
     .maybeSingle();
 
   if (!profileRow?.id) {
-    // Perform dummy hash work to avoid timing-based username enumeration
     hashRecoveryCode(normalized, "00000000000000000000000000000000");
     return NextResponse.json(
       { error: "Kullanıcı adı veya kurtarma kodu geçersiz." },
@@ -170,12 +172,12 @@ export async function POST(request: NextRequest) {
   }
 
   // Update Supabase Auth password cleanly
-  const { error: passErr } = await admin.auth.admin.updateUserById(profileRow.id, {
-    password: newPassword,
-  });
+  const { data: updatedAuth, error: passErr } = await admin.auth.admin.updateUserById(
+    profileRow.id,
+    { password: newPassword }
+  );
 
   if (passErr) {
-    // Roll back code consumption if Auth update failed
     await admin
       .from("account_recovery_codes")
       .update({ used_at: null })
@@ -184,6 +186,26 @@ export async function POST(request: NextRequest) {
       { error: passErr.message || "Şifre güncellenemedi." },
       { status: 500 }
     );
+  }
+
+  // Globally revoke ALL existing sessions & refresh tokens across all devices
+  const userEmail = updatedAuth?.user?.email;
+  if (userEmail) {
+    try {
+      const { url, publishableKey } = getSupabasePublicConfig();
+      const stateless = createClient(url, publishableKey, {
+        auth: { persistSession: false, autoRefreshToken: false },
+      });
+      const { data: tempSignIn } = await stateless.auth.signInWithPassword({
+        email: userEmail,
+        password: newPassword,
+      });
+      if (tempSignIn?.session?.access_token) {
+        await admin.auth.admin.signOut(tempSignIn.session.access_token, "global");
+      }
+    } catch {
+      // Do not fail recovery response if session revocation already completed
+    }
   }
 
   const { count } = await admin
