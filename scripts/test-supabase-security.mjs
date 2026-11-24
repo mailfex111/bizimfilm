@@ -286,9 +286,39 @@ async function runSixUserIsolationSuite() {
     createdUserIds.push(created.user.id);
 
     const client = makeAnonClient();
-    const { error: sErr } = await client.auth.signInWithPassword({ email, password });
-    if (sErr) throw new Error(`Sign in ${tag} failed: ${sErr.message}`);
+    const { data: sData, error: sErr } = await client.auth.signInWithPassword({ email, password });
+    if (sErr || !sData.session) throw new Error(`Sign in ${tag} failed: ${sErr?.message}`);
+    await client.realtime.setAuth(sData.session.access_token);
     return { user: created.user, client, email, password };
+  }
+
+  function subscribePostgresReady(channel, timeoutMs = 8000) {
+    return new Promise((resolve) => {
+      let done = false;
+      let channelSubscribed = false;
+      let pgReady = false;
+      const finish = (st) => {
+        if (done) return;
+        done = true;
+        clearTimeout(timer);
+        resolve(st);
+      };
+      const timer = setTimeout(() => finish(channelSubscribed ? "SUBSCRIBED" : "TIMEOUT"), timeoutMs);
+      channel.on("system", {}, (payload) => {
+        if (payload?.extension === "postgres_changes" && payload?.status === "ok") {
+          pgReady = true;
+          if (channelSubscribed) finish("SUBSCRIBED");
+        }
+      });
+      channel.subscribe((status, err) => {
+        if (status === "SUBSCRIBED") {
+          channelSubscribed = true;
+          if (pgReady) finish("SUBSCRIBED");
+        } else if (status === "CHANNEL_ERROR" || status === "TIMED_OUT" || status === "CLOSED") {
+          finish(err ? `${status}:${err.message}` : status);
+        }
+      });
+    });
   }
 
   try {
@@ -455,7 +485,7 @@ async function runSixUserIsolationSuite() {
       p_memory_date: "2024-02-14",
       p_layout_type: "photo-text",
     });
-    record("Memory Book optimistic concurrency prevents silent overwrite", !v2Err && savedV2?.version === 2 && Boolean(staleErr) ? "PASS" : "FAIL");
+    record("Memory Book optimistic concurrency prevents silent overwrite", !v2Err && savedV2?.version === 2 && Boolean(staleErr) ? "PASS" : "FAIL", v2Err?.message || (staleErr ? `v1->v2 OK, stale blocked: ${staleErr.message}` : "stale not blocked"));
 
     // 6. Live 2-Device Realtime Synchronization + Cross-Couple Realtime Isolation
     let a2ReceivedNote = false;
@@ -471,10 +501,11 @@ async function runSixUserIsolationSuite() {
         if (payload.new?.couple_id === coupleA.id) b1ReceivedNote = true;
       });
 
-    await Promise.all([
-      new Promise((res) => chA2.subscribe((s) => { if (s === "SUBSCRIBED") res(); })),
-      new Promise((res) => chB1.subscribe((s) => { if (s === "SUBSCRIBED") res(); })),
+    const [stA2, stB1] = await Promise.all([
+      subscribePostgresReady(chA2, 8000),
+      subscribePostgresReady(chB1, 8000),
     ]);
+    await new Promise((res) => setTimeout(res, 400));
 
     const { data: noteA } = await a1.client
       .from("notes")
@@ -485,8 +516,17 @@ async function runSixUserIsolationSuite() {
     await new Promise((res) => setTimeout(res, 2500));
     await Promise.all([a2.client.removeChannel(chA2), b1.client.removeChannel(chB1)]);
 
-    record("Realtime sync delivers live note from Partner A1 to Partner A2", a2ReceivedNote ? "PASS" : "FAIL");
-    record("Realtime RLS prevents Couple B from receiving Couple A events", !b1ReceivedNote ? "PASS" : "FAIL");
+    record("Realtime sync delivers live note from Partner A1 to Partner A2", a2ReceivedNote ? "PASS" : "FAIL", `chA2=${stA2}, received=${a2ReceivedNote}`);
+    record("Realtime RLS prevents Couple B from receiving Couple A events", stB1 === "SUBSCRIBED" && !b1ReceivedNote ? "PASS" : "FAIL", `chB1=${stB1}, leaked=${b1ReceivedNote}`);
+
+    // 6b. Special Dates CRUD & Cross-Couple Isolation
+    const { data: sdA, error: sdErr } = await a1.client
+      .from("special_dates")
+      .insert({ couple_id: coupleA.id, category: "anniversary", title: "Yıldönümümüz", event_date: "2024-02-14", repeat_yearly: true, created_by: a1.user.id })
+      .select("id")
+      .single();
+    const { data: bReadsSdA } = await b1.client.from("special_dates").select("id").eq("id", sdA?.id || "");
+    record("Special dates create & cross-couple isolation", !sdErr && (bReadsSdA?.length || 0) === 0 ? "PASS" : "FAIL");
 
     // 7. Partner Notification Trigger & Cross-Entity Search
     const { data: notifsA2 } = await a2.client.from("notifications").select("id, notification_type").eq("user_id", a2.user.id);
@@ -527,6 +567,9 @@ async function runSixUserIsolationSuite() {
     const { error: bStorageSignErr } = await b1.client.storage.from("couple-photos").createSignedUrl(photoPath, 60);
     record("Couple B cannot sign/download Couple A private storage object", Boolean(bStorageSignErr) ? "PASS" : "FAIL");
 
+    const { data: bDelSto } = await b1.client.storage.from("couple-photos").remove([photoPath]);
+    record("Couple B cannot delete Couple A private storage object", (bDelSto?.length || 0) === 0 ? "PASS" : "FAIL");
+
     const { error: bCrossBookPref } = await b1.client
       .from("user_preferences")
       .update({ last_open_book_id: bookA.id })
@@ -543,6 +586,19 @@ async function runSixUserIsolationSuite() {
       "Concurrent uploads cannot bypass 500 MB couple quota",
       quotaRaceEnforced ? "PASS" : "FAIL",
       `q1=${q1.error ? "blocked" : "reserved"}, q2=${q2.error ? "blocked" : "reserved"}`
+    );
+
+    // 9b. Legitimate media delete accurately reclaims storage quota
+    const { data: beforeDel } = await a1.client.rpc("get_couple_storage_breakdown");
+    const { error: delVidErr } = await a1.client.rpc("delete_media_and_reclaim_quota", { p_media_id: mediaVidA.id });
+    const { data: afterDel } = await a1.client.rpc("get_couple_storage_breakdown");
+    const reclaimed =
+      !delVidErr &&
+      Number(beforeDel?.[0]?.total_used_bytes || 0) - Number(afterDel?.[0]?.total_used_bytes || 0) === vidBytes.length;
+    record(
+      "Deleting media accurately reclaims couple storage quota",
+      reclaimed ? "PASS" : "FAIL",
+      `before=${beforeDel?.[0]?.total_used_bytes}B -> after=${afterDel?.[0]?.total_used_bytes}B`
     );
 
     // 10. Signed-Out Session Isolation
@@ -578,7 +634,7 @@ async function main() {
   const fail = results.filter((r) => r.status === "FAIL").length;
   const notTested = results.filter((r) => r.status === "NOT TESTED").length;
   console.log(`\nSummary: ${pass} PASS, ${fail} FAIL, ${notTested} NOT TESTED`);
-  if (fail > 0) process.exitCode = 1;
+  process.exit(fail > 0 ? 1 : 0);
 }
 
 main().catch((err) => {
