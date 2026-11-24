@@ -173,7 +173,7 @@ async function run() {
     }
     console.log("[PASS] Real Browser WebP + 1920px downscale + 480px thumbnail verified:", webpResult);
 
-    // 7. Verify Signup UI tab
+    // 7. Verify simplified username-only Signup UI tab (4 fields, zero email/phone)
     const buttons = await page.$$("button");
     for (const btn of buttons) {
       const text = await page.evaluate((el) => el.textContent?.trim(), btn);
@@ -184,10 +184,15 @@ async function run() {
     }
     await sleep(300);
     const signupText = await page.evaluate(() => document.body.innerText);
-    if (!signupText.includes("E-posta") || !signupText.toLowerCase().includes("kullanıcı adı")) {
-      throw new Error("Signup form missing required real auth fields");
+    if (
+      !signupText.toLowerCase().includes("ad soyad") ||
+      !signupText.toLowerCase().includes("kullanıcı adı") ||
+      !signupText.toLowerCase().includes("şifre tekrarı") ||
+      signupText.toLowerCase().includes("e-posta adresi")
+    ) {
+      throw new Error("Signup form does not match simplified 4-field username-only specification");
     }
-    console.log("[PASS] Miora Signup UI verified");
+    console.log("[PASS] Miora 4-field Username-Only Signup UI verified (zero email/phone)");
 
     // 8. Test Mobile Viewport (390x844) horizontal overflow check
     await page.setViewport({

@@ -66,6 +66,11 @@ function SettingsModalContent({
   const [statusMsg, setStatusMsg] = useState<string | null>(null);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
 
+  // Recovery codes state
+  const [recoveryRemaining, setRecoveryRemaining] = useState<number | null>(null);
+  const [freshRecoveryCodes, setFreshRecoveryCodes] = useState<string[] | null>(null);
+  const [regeneratingCodes, setRegeneratingCodes] = useState(false);
+
   // Legacy IndexedDB state
   const [legacyData, setLegacyData] = useState<LegacyInspectionResult | null>(null);
   const [migrating, setMigrating] = useState(false);
@@ -81,10 +86,44 @@ function SettingsModalContent({
     void inspectLegacyIndexedDB().then((res) => {
       if (active) setLegacyData(res);
     });
+    void fetch("/api/account/recovery-codes")
+      .then((r) => (r.ok ? r.json() : null))
+      .then((payload: { remainingCount?: number } | null) => {
+        if (active && payload && typeof payload.remainingCount === "number") {
+          setRecoveryRemaining(payload.remainingCount);
+        }
+      })
+      .catch(() => {});
     return () => {
       active = false;
     };
   }, []);
+
+  const handleRegenerateRecoveryCodes = async () => {
+    setRegeneratingCodes(true);
+    setStatusMsg(null);
+    setErrorMsg(null);
+    try {
+      const res = await fetch("/api/account/recovery-codes", { method: "POST" });
+      const payload = (await res.json()) as {
+        ok?: boolean;
+        recoveryCodes?: string[];
+        remainingCount?: number;
+        error?: string;
+      };
+      if (!res.ok || !payload.ok || !payload.recoveryCodes) {
+        setErrorMsg(payload.error || "Yeni kurtarma kodları oluşturulamadı.");
+        return;
+      }
+      setFreshRecoveryCodes(payload.recoveryCodes);
+      setRecoveryRemaining(payload.remainingCount ?? payload.recoveryCodes.length);
+      setStatusMsg(
+        "6 adet yeni tek kullanımlık kurtarma kodu oluşturuldu. Eski kullanılmamış kodlar iptal edildi."
+      );
+    } finally {
+      setRegeneratingCodes(false);
+    }
+  };
 
   const handleSaveProfile = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -243,7 +282,13 @@ function SettingsModalContent({
         <div className="flex items-center justify-between border-b border-[#343438] pb-4 mb-5">
           <div>
             <h3 className="text-[18px] font-semibold">Hesap Ayarları ve Veri Yönetimi</h3>
-            <p className="text-[12px] text-[#A1A1A6] mt-0.5">{user?.email}</p>
+            <p className="text-[12px] text-[#A1A1A6] mt-0.5">
+              {profile?.username
+                ? `@${profile.username}`
+                : user?.email && !user.email.endsWith("@users.miora.invalid")
+                ? user.email
+                : ""}
+            </p>
           </div>
           <button
             type="button"
@@ -373,6 +418,63 @@ function SettingsModalContent({
                 </button>
               </div>
             </form>
+
+            {/* Single-Use Account Recovery Codes Manager */}
+            <div className="pt-5 border-t border-[#343438] space-y-3">
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <div>
+                  <h4 className="text-[14px] font-semibold">
+                    Tek Kullanımlık Kurtarma Kodları
+                  </h4>
+                  <p className="text-[12px] text-[#A1A1A6] mt-0.5">
+                    {recoveryRemaining !== null
+                      ? `Aktif kullanılmamış kurtarma kodu: ${recoveryRemaining}`
+                      : "Şifrenizi unuttuğunuzda hesabınıza erişmek için kurtarma kodu oluşturabilirsiniz."}
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  disabled={regeneratingCodes}
+                  onClick={() => void handleRegenerateRecoveryCodes()}
+                  className="rounded-lg border border-[#343438] bg-[#222226] hover:bg-[#343438] px-3.5 py-2 text-[12px] font-medium text-[#F5F5F7] disabled:opacity-40 cursor-pointer"
+                >
+                  {regeneratingCodes
+                    ? "Oluşturuluyor..."
+                    : "Yeni Kurtarma Kodları Oluştur"}
+                </button>
+              </div>
+
+              {freshRecoveryCodes && (
+                <div className="rounded-xl border border-[#343438] bg-[#101012] p-4 space-y-3">
+                  <p className="text-[12px] text-[#D88A96]">
+                    Bu kodlar yalnızca şimdi görüntülenir. Güvenli bir yere kopyalayın.
+                  </p>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                    {freshRecoveryCodes.map((code, idx) => (
+                      <div
+                        key={code}
+                        className="rounded-lg border border-[#343438]/70 bg-[#18181B] px-3 py-2 font-mono text-[12px] text-[#F5F5F7] select-all"
+                      >
+                        <span className="text-[#A1A1A6] mr-2 select-none">
+                          {idx + 1}.
+                        </span>
+                        {code}
+                      </div>
+                    ))}
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      void navigator.clipboard.writeText(freshRecoveryCodes.join("\n"));
+                      setStatusMsg("Kurtarma kodları panoya kopyalandı.");
+                    }}
+                    className="rounded-lg bg-[#222226] hover:bg-[#343438] px-3 py-1.5 text-[12px] font-medium text-[#F5F5F7] cursor-pointer"
+                  >
+                    Tümünü Kopyala
+                  </button>
+                </div>
+              )}
+            </div>
           </div>
         )}
 

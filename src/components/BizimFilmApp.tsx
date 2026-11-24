@@ -19,6 +19,7 @@ import {
   type SpecialDateItem,
 } from "@/types";
 import LoginView from "@/components/LoginView";
+import RecoveryCodesScreen from "@/components/RecoveryCodesScreen";
 import CoupleOnboardingView from "@/components/CoupleOnboardingView";
 import Navbar from "@/components/Navbar";
 import HeroSection from "@/components/HeroSection";
@@ -45,10 +46,13 @@ const PhotosView = dynamic(() => import("@/components/PhotosView"), {
 export default function BizimFilmApp() {
   const {
     user,
+    profile,
     couple,
     preferences,
     isLoading,
     schemaError,
+    pendingRecoveryCodes,
+    clearPendingRecoveryCodes,
     refreshAccount,
     refreshStorage,
     signOut,
@@ -353,9 +357,20 @@ export default function BizimFilmApp() {
     );
   }
 
-  // Unauthenticated -> Real Supabase Login / Signup / Reset View
+  // Unauthenticated -> Real Supabase Login / Signup / Recovery View
   if (!user) {
     return <LoginView />;
+  }
+
+  // Newly registered user -> Show single-use recovery codes ONCE before onboarding
+  if (pendingRecoveryCodes && pendingRecoveryCodes.length > 0) {
+    return (
+      <RecoveryCodesScreen
+        codes={pendingRecoveryCodes}
+        username={profile?.username || ""}
+        onConfirm={clearPendingRecoveryCodes}
+      />
+    );
   }
 
   // Authenticated but SQL migration not yet run on Supabase

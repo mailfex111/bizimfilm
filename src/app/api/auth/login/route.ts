@@ -38,8 +38,12 @@ export async function POST(request: NextRequest) {
   let identifier = "";
   let password = "";
   try {
-    const body = (await request.json()) as { identifier?: string; password?: string };
-    identifier = (body.identifier || "").trim();
+    const body = (await request.json()) as {
+      username?: string;
+      identifier?: string;
+      password?: string;
+    };
+    identifier = (body.username || body.identifier || "").trim();
     password = body.password || "";
   } catch {
     return NextResponse.json({ error: "Geçersiz istek biçimi." }, { status: 400 });
@@ -47,24 +51,21 @@ export async function POST(request: NextRequest) {
 
   if (!identifier || !password) {
     return NextResponse.json(
-      { error: "E-posta/kullanıcı adı ve şifre zorunludur." },
+      { error: "Kullanıcı adı ve şifre zorunludur." },
       { status: 400 }
     );
   }
 
   let targetEmail = identifier;
 
-  // If identifier does not contain '@', resolve username strictly server-side
-  // without ever exposing whether the username or email exists to the client.
+  // Resolve username strictly server-side without revealing account existence.
+  // Pre-existing real-email accounts also continue working transparently.
   if (!identifier.includes("@")) {
     const admin = createServiceRoleClient();
     if (!admin) {
       return NextResponse.json(
-        {
-          error:
-            "Kullanıcı adı ile giriş için sunucu yapılandırması (SUPABASE_SERVICE_ROLE_KEY) gereklidir. Lütfen e-posta adresinizle giriş yapın.",
-        },
-        { status: 400 }
+        { error: "Sunucu kimlik doğrulama yapılandırması eksik." },
+        { status: 500 }
       );
     }
 
@@ -75,9 +76,8 @@ export async function POST(request: NextRequest) {
       .maybeSingle();
 
     if (!profileRow?.id) {
-      // Constant generic message to prevent account enumeration
       return NextResponse.json(
-        { error: "Giriş bilgileri hatalı. Lütfen kontrol edin." },
+        { error: "Kullanıcı adı veya şifre hatalı." },
         { status: 401 }
       );
     }
@@ -85,7 +85,7 @@ export async function POST(request: NextRequest) {
     const { data: authUser } = await admin.auth.admin.getUserById(profileRow.id);
     if (!authUser?.user?.email) {
       return NextResponse.json(
-        { error: "Giriş bilgileri hatalı. Lütfen kontrol edin." },
+        { error: "Kullanıcı adı veya şifre hatalı." },
         { status: 401 }
       );
     }
@@ -100,18 +100,8 @@ export async function POST(request: NextRequest) {
   });
 
   if (error || !data.user) {
-    if (error?.message?.toLowerCase().includes("email not confirmed")) {
-      return NextResponse.json(
-        {
-          error:
-            "E-posta adresiniz henüz doğrulanmamış. Lütfen gelen kutunuzdaki doğrulama bağlantısına tıklayın.",
-        },
-        { status: 403 }
-      );
-    }
-
     return NextResponse.json(
-      { error: "Giriş bilgileri hatalı. Lütfen kontrol edin." },
+      { error: "Kullanıcı adı veya şifre hatalı." },
       { status: 401 }
     );
   }

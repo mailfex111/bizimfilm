@@ -1,27 +1,28 @@
 "use client";
 
 import React, { useEffect, useState } from "react";
-import { Eye, EyeOff, AlertCircle, CheckCircle2 } from "lucide-react";
+import { Eye, EyeOff, AlertCircle, CheckCircle2, KeyRound } from "lucide-react";
 import { useAuth } from "@/context/AuthContext";
 
 type AuthMode = "login" | "signup" | "reset";
 
 export default function LoginView() {
-  const { signIn, signUp, requestPasswordReset } = useAuth();
+  const { signIn, signUp, recoverWithCode } = useAuth();
   const [mode, setMode] = useState<AuthMode>("login");
 
-  const [identifier, setIdentifier] = useState("");
-  const [email, setEmail] = useState("");
+  // Login / Recovery / Signup form states
   const [username, setUsername] = useState("");
   const [displayName, setDisplayName] = useState("");
   const [password, setPassword] = useState("");
+  const [confirmPassword, setConfirmPassword] = useState("");
+  const [recoveryCode, setRecoveryCode] = useState("");
   const [showPassword, setShowPassword] = useState(false);
 
   const [error, setError] = useState<string | null>(() => {
     if (typeof window === "undefined") return null;
     const params = new URLSearchParams(window.location.search);
     return params.get("auth_error") === "link_invalid"
-      ? "Doğrulama veya şifre sıfırlama bağlantısının süresi dolmuş veya geçersiz."
+      ? "Bağlantının süresi dolmuş veya geçersiz."
       : null;
   });
   const [infoMessage, setInfoMessage] = useState<string | null>(() => {
@@ -50,6 +51,9 @@ export default function LoginView() {
     setMode(nextMode);
     setError(null);
     setInfoMessage(null);
+    setPassword("");
+    setConfirmPassword("");
+    setRecoveryCode("");
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -60,34 +64,36 @@ export default function LoginView() {
 
     try {
       if (mode === "login") {
-        const res = await signIn(identifier, password);
+        const res = await signIn(username, password);
         if (!res.ok) {
-          setError(res.error || "Giriş yapılamadı.");
+          setError(res.error || "Kullanıcı adı veya şifre hatalı.");
         }
       } else if (mode === "signup") {
         const res = await signUp({
-          email,
-          password,
-          username,
           displayName,
+          username,
+          password,
+          confirmPassword,
         });
         if (!res.ok) {
           setError(res.error || "Kayıt işlemi tamamlanamadı.");
-        } else if (res.needsEmailVerification) {
-          setInfoMessage(
-            "Hesabınız oluşturuldu. Giriş yapabilmek için lütfen e-posta adresinize gönderilen doğrulama bağlantısına tıklayın."
-          );
-          setMode("login");
-          setIdentifier(email);
-          setPassword("");
         }
       } else {
-        const res = await requestPasswordReset(email);
+        const res = await recoverWithCode({
+          username,
+          recoveryCode,
+          newPassword: password,
+          confirmPassword,
+        });
         if (!res.ok) {
-          setError(res.error || "Şifre sıfırlama e-postası gönderilemedi.");
+          setError(res.error || "Şifre sıfırlama başarısız oldu.");
         } else {
+          setMode("login");
+          setPassword("");
+          setConfirmPassword("");
+          setRecoveryCode("");
           setInfoMessage(
-            "Eğer bu e-posta adresine kayıtlı bir hesap varsa, şifre sıfırlama bağlantısı gönderildi."
+            `Şifreniz güncellendi (kalan kurtarma kodu: ${res.remainingCodes ?? 0}). Yeni şifrenizle giriş yapabilirsiniz.`
           );
         }
       }
@@ -143,14 +149,14 @@ export default function LoginView() {
                 ? "Tekrar hoş geldiniz."
                 : mode === "signup"
                 ? "Hesap oluşturun."
-                : "Şifre sıfırlama."}
+                : "Hesap kurtarma."}
             </h2>
             <p className="mt-2 text-[14px] text-[#A1A1A6]">
               {mode === "login"
-                ? "Özel alanınıza erişmek için e-posta adresinizle giriş yapın."
+                ? "Özel alanınıza erişmek için kullanıcı adınızla giriş yapın."
                 : mode === "signup"
-                ? "Bireysel hesabınızı oluşturun, ardından çift alanınızı kurun veya partnerinizin davetine katılın."
-                : "Kayıtlı e-posta adresinizi girin, size güvenli sıfırlama bağlantısı gönderelim."}
+                ? "Sadece birkaç bilgiyle hesabınızı oluşturun, doğrudan anı alanınıza geçin."
+                : "Kayıt sırasında sakladığınız tek kullanımlık kurtarma koduyla yeni şifre belirleyin."}
             </p>
           </div>
 
@@ -162,14 +168,14 @@ export default function LoginView() {
                     htmlFor="miora-identifier"
                     className="block text-[13px] font-medium text-[#A1A1A6] mb-1.5"
                   >
-                    E-posta adresi
+                    Kullanıcı adı
                   </label>
                   <input
                     id="miora-identifier"
                     type="text"
-                    value={identifier}
-                    onChange={(e) => setIdentifier(e.target.value)}
-                    placeholder="adiniz@ornek.com"
+                    value={username}
+                    onChange={(e) => setUsername(e.target.value)}
+                    placeholder="kullanici.adi"
                     autoComplete="username"
                     className="w-full rounded-lg border border-[#343438] bg-[#18181B] px-3.5 py-2.5 text-[15px] text-[#F5F5F7] placeholder-[#A1A1A6]/45 focus:border-[#D88A96] focus:outline-none transition-apple"
                   />
@@ -220,58 +226,38 @@ export default function LoginView() {
 
             {mode === "signup" && (
               <>
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
-                  <div>
-                    <label
-                      htmlFor="miora-display-name"
-                      className="block text-[13px] font-medium text-[#A1A1A6] mb-1.5"
-                    >
-                      Adınız
-                    </label>
-                    <input
-                      id="miora-display-name"
-                      type="text"
-                      value={displayName}
-                      onChange={(e) => setDisplayName(e.target.value)}
-                      placeholder="Adınız"
-                      autoComplete="name"
-                      className="w-full rounded-lg border border-[#343438] bg-[#18181B] px-3.5 py-2.5 text-[14px] text-[#F5F5F7] placeholder-[#A1A1A6]/45 focus:border-[#D88A96] focus:outline-none transition-apple"
-                    />
-                  </div>
-
-                  <div>
-                    <label
-                      htmlFor="miora-username"
-                      className="block text-[13px] font-medium text-[#A1A1A6] mb-1.5"
-                    >
-                      Kullanıcı adı
-                    </label>
-                    <input
-                      id="miora-username"
-                      type="text"
-                      value={username}
-                      onChange={(e) => setUsername(e.target.value)}
-                      placeholder="kullanici.adi"
-                      autoComplete="username"
-                      className="w-full rounded-lg border border-[#343438] bg-[#18181B] px-3.5 py-2.5 text-[14px] text-[#F5F5F7] placeholder-[#A1A1A6]/45 focus:border-[#D88A96] focus:outline-none transition-apple"
-                    />
-                  </div>
+                <div>
+                  <label
+                    htmlFor="miora-display-name"
+                    className="block text-[13px] font-medium text-[#A1A1A6] mb-1.5"
+                  >
+                    Ad soyad
+                  </label>
+                  <input
+                    id="miora-display-name"
+                    type="text"
+                    value={displayName}
+                    onChange={(e) => setDisplayName(e.target.value)}
+                    placeholder="Adınız Soyadınız"
+                    autoComplete="name"
+                    className="w-full rounded-lg border border-[#343438] bg-[#18181B] px-3.5 py-2.5 text-[14px] text-[#F5F5F7] placeholder-[#A1A1A6]/45 focus:border-[#D88A96] focus:outline-none transition-apple"
+                  />
                 </div>
 
                 <div>
                   <label
-                    htmlFor="miora-signup-email"
+                    htmlFor="miora-username"
                     className="block text-[13px] font-medium text-[#A1A1A6] mb-1.5"
                   >
-                    E-posta adresi
+                    Kullanıcı adı
                   </label>
                   <input
-                    id="miora-signup-email"
-                    type="email"
-                    value={email}
-                    onChange={(e) => setEmail(e.target.value)}
-                    placeholder="adiniz@ornek.com"
-                    autoComplete="email"
+                    id="miora-username"
+                    type="text"
+                    value={username}
+                    onChange={(e) => setUsername(e.target.value)}
+                    placeholder="kullanici.adi"
+                    autoComplete="username"
                     className="w-full rounded-lg border border-[#343438] bg-[#18181B] px-3.5 py-2.5 text-[14px] text-[#F5F5F7] placeholder-[#A1A1A6]/45 focus:border-[#D88A96] focus:outline-none transition-apple"
                   />
                 </div>
@@ -281,7 +267,7 @@ export default function LoginView() {
                     htmlFor="miora-signup-password"
                     className="block text-[13px] font-medium text-[#A1A1A6] mb-1.5"
                   >
-                    Şifre (en az 8 karakter)
+                    Şifre
                   </label>
                   <div className="relative">
                     <input
@@ -289,7 +275,7 @@ export default function LoginView() {
                       type={showPassword ? "text" : "password"}
                       value={password}
                       onChange={(e) => setPassword(e.target.value)}
-                      placeholder="••••••••"
+                      placeholder="En az 8 karakter"
                       autoComplete="new-password"
                       className="w-full rounded-lg border border-[#343438] bg-[#18181B] pl-3.5 pr-10 py-2.5 text-[14px] text-[#F5F5F7] placeholder-[#A1A1A6]/45 focus:border-[#D88A96] focus:outline-none transition-apple"
                     />
@@ -307,27 +293,105 @@ export default function LoginView() {
                     </button>
                   </div>
                 </div>
+
+                <div>
+                  <label
+                    htmlFor="miora-signup-confirm-password"
+                    className="block text-[13px] font-medium text-[#A1A1A6] mb-1.5"
+                  >
+                    Şifre tekrarı
+                  </label>
+                  <input
+                    id="miora-signup-confirm-password"
+                    type={showPassword ? "text" : "password"}
+                    value={confirmPassword}
+                    onChange={(e) => setConfirmPassword(e.target.value)}
+                    placeholder="Şifrenizi tekrar girin"
+                    autoComplete="new-password"
+                    className="w-full rounded-lg border border-[#343438] bg-[#18181B] px-3.5 py-2.5 text-[14px] text-[#F5F5F7] placeholder-[#A1A1A6]/45 focus:border-[#D88A96] focus:outline-none transition-apple"
+                  />
+                </div>
               </>
             )}
 
             {mode === "reset" && (
-              <div>
-                <label
-                  htmlFor="miora-reset-email"
-                  className="block text-[13px] font-medium text-[#A1A1A6] mb-1.5"
-                >
-                  E-posta adresi
-                </label>
-                <input
-                  id="miora-reset-email"
-                  type="email"
-                  value={email}
-                  onChange={(e) => setEmail(e.target.value)}
-                  placeholder="adiniz@ornek.com"
-                  autoComplete="email"
-                  className="w-full rounded-lg border border-[#343438] bg-[#18181B] px-3.5 py-2.5 text-[15px] text-[#F5F5F7] placeholder-[#A1A1A6]/45 focus:border-[#D88A96] focus:outline-none transition-apple"
-                />
-              </div>
+              <>
+                <div>
+                  <label
+                    htmlFor="miora-recover-username"
+                    className="block text-[13px] font-medium text-[#A1A1A6] mb-1.5"
+                  >
+                    Kullanıcı adı
+                  </label>
+                  <input
+                    id="miora-recover-username"
+                    type="text"
+                    value={username}
+                    onChange={(e) => setUsername(e.target.value)}
+                    placeholder="kullanici.adi"
+                    autoComplete="username"
+                    className="w-full rounded-lg border border-[#343438] bg-[#18181B] px-3.5 py-2.5 text-[14px] text-[#F5F5F7] placeholder-[#A1A1A6]/45 focus:border-[#D88A96] focus:outline-none transition-apple"
+                  />
+                </div>
+
+                <div>
+                  <label
+                    htmlFor="miora-recover-code"
+                    className="block text-[13px] font-medium text-[#A1A1A6] mb-1.5"
+                  >
+                    Tek kullanımlık kurtarma kodu
+                  </label>
+                  <div className="relative">
+                    <KeyRound className="h-4 w-4 text-[#A1A1A6] absolute left-3.5 top-1/2 -translate-y-1/2 pointer-events-none" />
+                    <input
+                      id="miora-recover-code"
+                      type="text"
+                      value={recoveryCode}
+                      onChange={(e) => setRecoveryCode(e.target.value)}
+                      placeholder="XXXX-XXXX-XXXX-XXXX"
+                      autoComplete="off"
+                      spellCheck={false}
+                      className="w-full rounded-lg border border-[#343438] bg-[#18181B] pl-10 pr-3.5 py-2.5 font-mono text-[13px] uppercase tracking-wider text-[#F5F5F7] placeholder-[#A1A1A6]/45 focus:border-[#D88A96] focus:outline-none transition-apple"
+                    />
+                  </div>
+                </div>
+
+                <div>
+                  <label
+                    htmlFor="miora-recover-password"
+                    className="block text-[13px] font-medium text-[#A1A1A6] mb-1.5"
+                  >
+                    Yeni şifre
+                  </label>
+                  <input
+                    id="miora-recover-password"
+                    type={showPassword ? "text" : "password"}
+                    value={password}
+                    onChange={(e) => setPassword(e.target.value)}
+                    placeholder="En az 8 karakter"
+                    autoComplete="new-password"
+                    className="w-full rounded-lg border border-[#343438] bg-[#18181B] px-3.5 py-2.5 text-[14px] text-[#F5F5F7] placeholder-[#A1A1A6]/45 focus:border-[#D88A96] focus:outline-none transition-apple"
+                  />
+                </div>
+
+                <div>
+                  <label
+                    htmlFor="miora-recover-confirm"
+                    className="block text-[13px] font-medium text-[#A1A1A6] mb-1.5"
+                  >
+                    Yeni şifre tekrarı
+                  </label>
+                  <input
+                    id="miora-recover-confirm"
+                    type={showPassword ? "text" : "password"}
+                    value={confirmPassword}
+                    onChange={(e) => setConfirmPassword(e.target.value)}
+                    placeholder="Yeni şifrenizi tekrar girin"
+                    autoComplete="new-password"
+                    className="w-full rounded-lg border border-[#343438] bg-[#18181B] px-3.5 py-2.5 text-[14px] text-[#F5F5F7] placeholder-[#A1A1A6]/45 focus:border-[#D88A96] focus:outline-none transition-apple"
+                  />
+                </div>
+              </>
             )}
 
             {error && (
@@ -358,7 +422,7 @@ export default function LoginView() {
                 ? "Giriş Yap"
                 : mode === "signup"
                 ? "Hesap Oluştur"
-                : "Sıfırlama Bağlantısı Gönder"}
+                : "Şifreyi Güncelle"}
             </button>
           </form>
 

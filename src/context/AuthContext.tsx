@@ -22,16 +22,23 @@ interface AuthContextValue {
   storageBreakdown: StorageBreakdown | null;
   isLoading: boolean;
   schemaError: string | null;
+  pendingRecoveryCodes: string[] | null;
+  clearPendingRecoveryCodes: () => void;
   refreshAccount: () => Promise<void>;
   refreshStorage: () => Promise<void>;
-  signIn: (identifier: string, password: string) => Promise<{ ok: boolean; error?: string }>;
+  signIn: (username: string, password: string) => Promise<{ ok: boolean; error?: string }>;
   signUp: (params: {
-    email: string;
-    password: string;
-    username: string;
     displayName: string;
-  }) => Promise<{ ok: boolean; needsEmailVerification?: boolean; error?: string }>;
-  requestPasswordReset: (email: string) => Promise<{ ok: boolean; error?: string }>;
+    username: string;
+    password: string;
+    confirmPassword: string;
+  }) => Promise<{ ok: boolean; recoveryCodes?: string[]; error?: string }>;
+  recoverWithCode: (params: {
+    username: string;
+    recoveryCode: string;
+    newPassword: string;
+    confirmPassword: string;
+  }) => Promise<{ ok: boolean; remainingCodes?: number; error?: string }>;
   updatePassword: (newPassword: string) => Promise<{ ok: boolean; error?: string }>;
   updateProfile: (updates: {
     display_name?: string;
@@ -65,6 +72,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [storageBreakdown, setStorageBreakdown] = useState<StorageBreakdown | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [schemaError, setSchemaError] = useState<string | null>(null);
+  const [pendingRecoveryCodes, setPendingRecoveryCodes] = useState<string[] | null>(null);
+
+  const clearPendingRecoveryCodes = useCallback(() => {
+    setPendingRecoveryCodes(null);
+  }, []);
 
   const refreshStorage = useCallback(async () => {
     try {
@@ -297,26 +309,26 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }, [loadAccountContext]);
 
   const signIn = async (
-    identifier: string,
+    username: string,
     password: string
   ): Promise<{ ok: boolean; error?: string }> => {
-    const cleanId = identifier.trim();
+    const cleanId = username.trim();
     if (!cleanId || !password) {
-      return { ok: false, error: "E-posta/kullanıcı adı ve şifre zorunludur." };
+      return { ok: false, error: "Kullanıcı adı ve şifre zorunludur." };
     }
 
     try {
       const res = await fetch("/api/auth/login", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ identifier: cleanId, password }),
+        body: JSON.stringify({ username: cleanId, password }),
       });
 
       const payload = (await res.json()) as { ok?: boolean; error?: string };
       if (!res.ok) {
         return {
           ok: false,
-          error: payload.error || "Giriş başarısız. Bilgilerinizi kontrol edin.",
+          error: payload.error || "Kullanıcı adı veya şifre hatalı.",
         };
       }
 
@@ -329,90 +341,121 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   };
 
   const signUp = async (params: {
-    email: string;
-    password: string;
-    username: string;
     displayName: string;
-  }): Promise<{ ok: boolean; needsEmailVerification?: boolean; error?: string }> => {
-    const cleanEmail = params.email.trim().toLowerCase();
-    const cleanUsername = params.username.trim().toLowerCase();
+    username: string;
+    password: string;
+    confirmPassword: string;
+  }): Promise<{ ok: boolean; recoveryCodes?: string[]; error?: string }> => {
     const cleanDisplay = params.displayName.trim();
+    const cleanUsername = params.username.trim().toLowerCase();
 
-    if (!cleanEmail || !cleanEmail.includes("@")) {
-      return { ok: false, error: "Geçerli bir e-posta adresi girin." };
+    if (cleanDisplay.length < 2) {
+      return { ok: false, error: "Lütfen ad soyadınızı girin (en az 2 karakter)." };
     }
-    if (!/^[a-zA-Z0-9._-]{3,32}$/.test(cleanUsername)) {
+    if (!/^[a-z0-9._-]{3,32}$/.test(cleanUsername)) {
       return {
         ok: false,
-        error: "Kullanıcı adı 3–32 karakter olmalı ve yalnızca harf, rakam, ., _, - içermelidir.",
+        error:
+          "Kullanıcı adı 3–32 karakter olmalı ve yalnızca küçük harf, rakam, ., _, - içermelidir.",
       };
-    }
-    if (cleanDisplay.length < 1) {
-      return { ok: false, error: "Lütfen adınızı girin." };
     }
     if (params.password.length < 8) {
       return { ok: false, error: "Şifreniz en az 8 karakter olmalıdır." };
     }
+    if (params.password !== params.confirmPassword) {
+      return { ok: false, error: "Şifre ve şifre tekrarı birbiriyle eşleşmiyor." };
+    }
 
-    const supabase = createClient();
-    const redirectBase =
-      typeof window !== "undefined"
-        ? window.location.origin
-        : process.env.NEXT_PUBLIC_SITE_URL || "https://bizimfilm.vercel.app";
-
-    const { data, error } = await supabase.auth.signUp({
-      email: cleanEmail,
-      password: params.password,
-      options: {
-        emailRedirectTo: `${redirectBase}/auth/callback`,
-        data: {
+    try {
+      const res = await fetch("/api/auth/signup", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          displayName: cleanDisplay,
           username: cleanUsername,
-          display_name: cleanDisplay,
-        },
-      },
-    });
+          password: params.password,
+          confirmPassword: params.confirmPassword,
+        }),
+      });
 
-    if (error) {
+      const payload = (await res.json()) as {
+        ok?: boolean;
+        recoveryCodes?: string[];
+        error?: string;
+      };
+
+      if (!res.ok || !payload.ok) {
+        return {
+          ok: false,
+          error: payload.error || "Kayıt işlemi tamamlanamadı.",
+        };
+      }
+
+      if (Array.isArray(payload.recoveryCodes) && payload.recoveryCodes.length > 0) {
+        setPendingRecoveryCodes(payload.recoveryCodes);
+      }
+
+      await refreshAccount();
+      return { ok: true, recoveryCodes: payload.recoveryCodes };
+    } catch {
       return {
         ok: false,
-        error:
-          error.message.toLowerCase().includes("already registered")
-            ? "Bu e-posta adresi ile zaten kayıtlı bir hesap bulunuyor."
-            : error.message,
+        error: "Sunucuya bağlanılamadı. İnternet bağlantınızı kontrol edin.",
       };
     }
-
-    const needsEmailVerification = !data.session;
-    if (data.session?.user) {
-      setUser(data.session.user);
-      await loadAccountContext(data.session.user);
-    }
-
-    return { ok: true, needsEmailVerification };
   };
 
-  const requestPasswordReset = async (
-    email: string
-  ): Promise<{ ok: boolean; error?: string }> => {
-    const cleanEmail = email.trim().toLowerCase();
-    if (!cleanEmail || !cleanEmail.includes("@")) {
-      return { ok: false, error: "Lütfen geçerli bir e-posta adresi girin." };
+  const recoverWithCode = async (params: {
+    username: string;
+    recoveryCode: string;
+    newPassword: string;
+    confirmPassword: string;
+  }): Promise<{ ok: boolean; remainingCodes?: number; error?: string }> => {
+    const cleanUsername = params.username.trim().toLowerCase();
+    const cleanCode = params.recoveryCode.trim();
+
+    if (!cleanUsername || !cleanCode) {
+      return { ok: false, error: "Kullanıcı adı ve kurtarma kodu zorunludur." };
+    }
+    if (params.newPassword.length < 8) {
+      return { ok: false, error: "Yeni şifreniz en az 8 karakter olmalıdır." };
+    }
+    if (params.newPassword !== params.confirmPassword) {
+      return { ok: false, error: "Yeni şifre ve şifre tekrarı eşleşmiyor." };
     }
 
-    const supabase = createClient();
-    const redirectBase =
-      typeof window !== "undefined"
-        ? window.location.origin
-        : process.env.NEXT_PUBLIC_SITE_URL || "https://bizimfilm.vercel.app";
+    try {
+      const res = await fetch("/api/auth/recover", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          username: cleanUsername,
+          recoveryCode: cleanCode,
+          newPassword: params.newPassword,
+          confirmPassword: params.confirmPassword,
+        }),
+      });
 
-    const { error } = await supabase.auth.resetPasswordForEmail(cleanEmail, {
-      redirectTo: `${redirectBase}/auth/callback?next=/auth/reset-password`,
-    });
+      const payload = (await res.json()) as {
+        ok?: boolean;
+        remainingCodes?: number;
+        error?: string;
+      };
 
-    if (error) {
-      return { ok: false, error: error.message };
+      if (!res.ok || !payload.ok) {
+        return {
+          ok: false,
+          error: payload.error || "Hesap kurtarma başarısız.",
+        };
+      }
+
+      return { ok: true, remainingCodes: payload.remainingCodes };
+    } catch {
+      return {
+        ok: false,
+        error: "Sunucuya bağlanılamadı. İnternet bağlantınızı kontrol edin.",
+      };
     }
-    return { ok: true };
   };
 
   const updatePassword = async (
@@ -504,6 +547,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     setMemberAvatarUrls({});
     setPreferences(null);
     setStorageBreakdown(null);
+    setPendingRecoveryCodes(null);
   };
 
   return (
@@ -518,11 +562,13 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         storageBreakdown,
         isLoading,
         schemaError,
+        pendingRecoveryCodes,
+        clearPendingRecoveryCodes,
         refreshAccount,
         refreshStorage,
         signIn,
         signUp,
-        requestPasswordReset,
+        recoverWithCode,
         updatePassword,
         updateProfile,
         updatePreferences,
