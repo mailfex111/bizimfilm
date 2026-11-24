@@ -9,11 +9,11 @@ import {
   LogOut,
   Menu,
   X,
-  Check,
-  User,
+  Users,
 } from "lucide-react";
 import { useAuth } from "@/context/AuthContext";
-import { type CoupleId, type NavTab } from "@/types";
+import { formatTurkishDate } from "@/lib/dateUtils";
+import { type NavTab } from "@/types";
 
 interface NavbarProps {
   activeTab: NavTab;
@@ -21,7 +21,8 @@ interface NavbarProps {
   onOpenSearch: () => void;
   onOpenNotifications: () => void;
   onOpenSettingsModal: () => void;
-  unreadNotificationsCount?: number;
+  unreadNotificationsCount: number;
+  realtimeConnected: boolean;
 }
 
 const NAV_ITEMS: { id: NavTab; label: string }[] = [
@@ -32,33 +33,26 @@ const NAV_ITEMS: { id: NavTab; label: string }[] = [
   { id: "muzik", label: "Müzik" },
 ];
 
-const COUPLE_LIST: { id: CoupleId; names: string }[] = [
-  { id: "cift1", names: "Emir ve Hazal" },
-  { id: "cift2", names: "Sümeyya ve Berke" },
-  { id: "cift3", names: "Gamze ve Onur" },
-];
-
 export default function Navbar({
   activeTab,
   onSelectTab,
   onOpenSearch,
   onOpenNotifications,
   onOpenSettingsModal,
-  unreadNotificationsCount = 2,
+  unreadNotificationsCount,
+  realtimeConnected,
 }: NavbarProps) {
-  const { currentCouple, logout, switchDemoCouple } = useAuth();
+  const { user, profile, couple, members, memberAvatarUrls, signOut } = useAuth();
   const [profileMenuOpen, setProfileMenuOpen] = useState(false);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
-
-  const partner1Label = currentCouple?.partner1Name || "Emir";
-  const partner2Label = currentCouple?.partner2Name || "Hazal";
-  const coupleFullName = `${partner1Label} & ${partner2Label}`;
 
   const handleNavClick = (tab: NavTab) => {
     onSelectTab(tab);
     setMobileMenuOpen(false);
     setProfileMenuOpen(false);
   };
+
+  const coupleTitle = couple?.couple_name || profile?.display_name || "Hesabım";
 
   return (
     <header className="sticky top-0 z-40 w-full bg-[#101012]/90 backdrop-blur-md border-b border-[#343438]/60">
@@ -77,9 +71,15 @@ export default function Navbar({
           <button
             type="button"
             onClick={() => handleNavClick("ana-sayfa")}
-            className="text-[18px] font-semibold tracking-[-0.025em] text-[#F5F5F7] hover:opacity-85 transition-apple cursor-pointer focus:outline-none"
+            className="flex items-center gap-2 text-[18px] font-semibold tracking-[-0.025em] text-[#F5F5F7] hover:opacity-85 transition-apple cursor-pointer focus:outline-none"
           >
-            BizimFilm
+            <span>Miora</span>
+            <span
+              title={realtimeConnected ? "Canlı senkronizasyon aktif" : "Bağlantı bekleniyor"}
+              className={`h-1.5 w-1.5 rounded-full ${
+                realtimeConnected ? "bg-[#D88A96]" : "bg-[#A1A1A6]/40"
+              }`}
+            />
           </button>
         </div>
 
@@ -110,7 +110,7 @@ export default function Navbar({
           })}
         </nav>
 
-        {/* Right: Search, Notifications, Profile Menu */}
+        {/* Right: Search, Real Notifications, Couple Profile Menu */}
         <div className="relative flex items-center gap-2 sm:gap-3">
           <button
             type="button"
@@ -131,11 +131,13 @@ export default function Navbar({
           >
             <Bell className="h-4 w-4" />
             {unreadNotificationsCount > 0 && (
-              <span className="absolute top-2 right-2 h-1.5 w-1.5 rounded-full bg-[#D88A96]" />
+              <span className="absolute top-1 right-1 flex h-4 min-w-4 items-center justify-center rounded-full bg-[#D88A96] px-1 text-[10px] font-semibold text-[#101012]">
+                {unreadNotificationsCount > 9 ? "9+" : unreadNotificationsCount}
+              </span>
             )}
           </button>
 
-          {/* Couple Profile Pill */}
+          {/* Netflix-style Dual Couple Avatars Pill */}
           <button
             type="button"
             onClick={() => setProfileMenuOpen((prev) => !prev)}
@@ -144,23 +146,36 @@ export default function Navbar({
             className="flex items-center gap-2 rounded-full border border-[#343438] bg-[#18181B] hover:bg-[#222226] py-1 pl-1.5 pr-2.5 transition-apple cursor-pointer focus:outline-none"
           >
             <div className="flex items-center -space-x-1.5">
-              <img
-                src={currentCouple?.avatar1 || "/images/avatar-ben.webp"}
-                alt={partner1Label}
-                width={24}
-                height={24}
-                className="h-6 w-6 rounded-full border border-[#101012] object-cover"
-              />
-              <img
-                src={currentCouple?.avatar2 || "/images/avatar-sen.webp"}
-                alt={partner2Label}
-                width={24}
-                height={24}
-                className="h-6 w-6 rounded-full border border-[#101012] object-cover"
-              />
+              {members.length > 0 ? (
+                members.map((m) => {
+                  const avatar = memberAvatarUrls[m.user_id];
+                  const initial = (m.profile?.display_name || "M").slice(0, 1).toUpperCase();
+                  return avatar ? (
+                    <img
+                      key={m.id}
+                      src={avatar}
+                      alt={m.profile?.display_name || "Üye"}
+                      width={24}
+                      height={24}
+                      className="h-6 w-6 rounded-full border border-[#101012] object-cover"
+                    />
+                  ) : (
+                    <span
+                      key={m.id}
+                      className="flex h-6 w-6 items-center justify-center rounded-full border border-[#101012] bg-[#222226] text-[10px] font-semibold text-[#F5F5F7]"
+                    >
+                      {initial}
+                    </span>
+                  );
+                })
+              ) : (
+                <span className="flex h-6 w-6 items-center justify-center rounded-full border border-[#101012] bg-[#222226] text-[10px] font-semibold text-[#F5F5F7]">
+                  {(profile?.display_name || "M").slice(0, 1).toUpperCase()}
+                </span>
+              )}
             </div>
-            <span className="hidden sm:inline text-[13px] font-medium text-[#F5F5F7]">
-              {coupleFullName}
+            <span className="hidden sm:inline text-[13px] font-medium text-[#F5F5F7] max-w-[140px] truncate">
+              {coupleTitle}
             </span>
             <ChevronDown
               className={`h-3.5 w-3.5 text-[#A1A1A6] transition-transform duration-150 ${
@@ -169,21 +184,63 @@ export default function Navbar({
             />
           </button>
 
-          {/* Clean Profile Dropdown */}
+          {/* Clean Profile Dropdown (Read-only partner visibility, personal settings for self only) */}
           {profileMenuOpen && (
             <>
               <div
                 onClick={() => setProfileMenuOpen(false)}
                 className="fixed inset-0 z-40"
               />
-              <div className="absolute right-0 top-[calc(100%+8px)] z-50 w-56 rounded-xl border border-[#343438] bg-[#18181B] p-2 shadow-2xl">
+              <div className="absolute right-0 top-[calc(100%+8px)] z-50 w-64 rounded-xl border border-[#343438] bg-[#18181B] p-2 shadow-2xl">
                 <div className="px-3 py-2 border-b border-[#343438]/70 mb-1.5">
-                  <div className="text-[13px] font-semibold text-[#F5F5F7]">
-                    {coupleFullName}
+                  <div className="text-[13px] font-semibold text-[#F5F5F7] truncate">
+                    {coupleTitle}
                   </div>
-                  <div className="text-[11px] text-[#A1A1A6]">
-                    {currentCouple?.anniversaryDate}
-                  </div>
+                  {couple?.relationship_start_date && (
+                    <div className="text-[11px] text-[#A1A1A6]">
+                      {formatTurkishDate(couple.relationship_start_date)}
+                    </div>
+                  )}
+                </div>
+
+                {/* Partner Profiles Display (Authenticated user marked clearly; no unauthorized switching) */}
+                <div className="px-2 py-1 space-y-1 mb-1">
+                  {members.map((m) => {
+                    const isMe = m.user_id === user?.id;
+                    const avatar = memberAvatarUrls[m.user_id];
+                    const name = m.profile?.display_name || "Üye";
+                    return (
+                      <div
+                        key={m.id}
+                        className="flex items-center justify-between rounded-lg px-2 py-1.5 bg-[#101012]/60"
+                      >
+                        <div className="flex items-center gap-2 min-w-0">
+                          {avatar ? (
+                            <img
+                              src={avatar}
+                              alt={name}
+                              className="h-6 w-6 rounded-full object-cover border border-[#343438]"
+                            />
+                          ) : (
+                            <span className="flex h-6 w-6 items-center justify-center rounded-full bg-[#222226] text-[10px] font-semibold text-[#F5F5F7]">
+                              {name.slice(0, 1).toUpperCase()}
+                            </span>
+                          )}
+                          <div className="min-w-0">
+                            <div className="text-[12px] font-medium text-[#F5F5F7] truncate">
+                              {name}
+                            </div>
+                            <div className="text-[10px] text-[#A1A1A6] truncate">
+                              @{m.profile?.username || "kullanici"}
+                            </div>
+                          </div>
+                        </div>
+                        <span className="text-[10px] font-medium text-[#D88A96] shrink-0">
+                          {isMe ? "Siz" : "Partner"}
+                        </span>
+                      </div>
+                    );
+                  })}
                 </div>
 
                 <button
@@ -191,8 +248,8 @@ export default function Navbar({
                   onClick={() => handleNavClick("biz")}
                   className="flex w-full items-center gap-2.5 rounded-lg px-3 py-2 text-left text-[13px] text-[#F5F5F7] hover:bg-[#222226] transition-apple cursor-pointer"
                 >
-                  <User className="h-3.5 w-3.5 text-[#A1A1A6]" />
-                  <span>Çift Profilimiz</span>
+                  <Users className="h-3.5 w-3.5 text-[#A1A1A6]" />
+                  <span>Çift Alanı ve Davet</span>
                 </button>
 
                 <button
@@ -204,37 +261,14 @@ export default function Navbar({
                   className="flex w-full items-center gap-2.5 rounded-lg px-3 py-2 text-left text-[13px] text-[#F5F5F7] hover:bg-[#222226] transition-apple cursor-pointer"
                 >
                   <Settings className="h-3.5 w-3.5 text-[#A1A1A6]" />
-                  <span>Veri ve Yedekleme</span>
+                  <span>Hesap Ayarları ve Kota</span>
                 </button>
-
-                <div className="my-1.5 h-px bg-[#343438]/70" />
-
-                <div className="px-3 py-1 text-[11px] font-medium text-[#A1A1A6]">
-                  Hesap Değiştir
-                </div>
-                {COUPLE_LIST.map((item) => {
-                  const isCurrent = currentCouple?.id === item.id;
-                  return (
-                    <button
-                      key={item.id}
-                      type="button"
-                      onClick={() => {
-                        void switchDemoCouple(item.id);
-                        setProfileMenuOpen(false);
-                      }}
-                      className="flex w-full items-center justify-between rounded-lg px-3 py-1.5 text-left text-[12px] text-[#F5F5F7] hover:bg-[#222226] transition-apple cursor-pointer"
-                    >
-                      <span>{item.names}</span>
-                      {isCurrent && <Check className="h-3.5 w-3.5 text-[#D88A96]" />}
-                    </button>
-                  );
-                })}
 
                 <div className="my-1.5 h-px bg-[#343438]/70" />
 
                 <button
                   type="button"
-                  onClick={logout}
+                  onClick={() => void signOut()}
                   className="flex w-full items-center gap-2.5 rounded-lg px-3 py-2 text-left text-[13px] text-[#D88A96] hover:bg-[#222226] transition-apple cursor-pointer"
                 >
                   <LogOut className="h-3.5 w-3.5" />
@@ -253,7 +287,12 @@ export default function Navbar({
           className="md:hidden border-t border-[#343438] bg-[#18181B] px-4 py-3"
         >
           <div className="flex flex-col gap-1">
-            {NAV_ITEMS.map((item) => {
+            {[
+              ...NAV_ITEMS,
+              { id: "ozel-gunler" as NavTab, label: "Özel Günler" },
+              { id: "notlar" as NavTab, label: "Notlar" },
+              { id: "biz" as NavTab, label: "Çift Profilimiz" },
+            ].map((item) => {
               const isActive = activeTab === item.id;
               return (
                 <button

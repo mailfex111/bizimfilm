@@ -2,6 +2,7 @@ import type { Metadata, Viewport } from "next";
 import { Inter, Playfair_Display } from "next/font/google";
 import "./globals.css";
 import { AuthProvider } from "@/context/AuthContext";
+import { AudioPlayerProvider } from "@/context/AudioPlayerContext";
 
 const inter = Inter({
   subsets: ["latin", "latin-ext"],
@@ -20,9 +21,13 @@ const playfair = Playfair_Display({
 });
 
 export const metadata: Metadata = {
-  title: "BizimFilm — Özel Dijital Anı Alanı",
+  title: "Miora — Özel Dijital Anı Alanı",
   description:
-    "Fotoğraflarınız, hikâyeleriniz ve unutmak istemediğiniz anlarınız. Yalnızca ikinize özel.",
+    "Fotoğraflarınız, hikâyeleriniz, müzikleriniz ve unutmak istemediğiniz anlarınız. Yalnızca ikinize özel.",
+  robots: {
+    index: false,
+    follow: false,
+  },
 };
 
 export const viewport: Viewport = {
@@ -39,7 +44,9 @@ export default function RootLayout({
   return (
     <html lang="tr" className={`${inter.variable} ${playfair.variable}`}>
       <body className="min-h-screen bg-[#101012] text-[#F5F5F7] antialiased selection:bg-[#D88A96]/30 selection:text-[#F5F5F7]">
-        <AuthProvider>{children}</AuthProvider>
+        <AuthProvider>
+          <AudioPlayerProvider>{children}</AudioPlayerProvider>
+        </AuthProvider>
       </body>
     </html>
   );

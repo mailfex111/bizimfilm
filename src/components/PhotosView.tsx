@@ -10,53 +10,72 @@ import {
   Check,
   X,
   AlertCircle,
+  Search,
+  RefreshCw,
 } from "lucide-react";
+import { useAuth } from "@/context/AuthContext";
+import { createClient } from "@/lib/supabase/client";
+import { formatBytes } from "@/lib/mediaOptimizer";
 import {
-  addCouplePhoto,
-  deleteCouplePhoto,
-  saveCoupleBookPage,
-  updateCouplePhoto,
-} from "@/lib/db";
-import { optimizeImageToWebP, validateImageFile } from "@/lib/imageOptimizer";
-import { type BookPageItem, type CoupleId, type PhotoItem } from "@/types";
+  deleteCoupleMedia,
+  getSignedUrl,
+  getSignedUrlsBatch,
+  uploadCoupleMedia,
+} from "@/lib/storage";
+import { type MediaItem, type MemoryBook } from "@/types";
 
 interface PhotosViewProps {
-  coupleId: CoupleId;
-  photos: PhotoItem[];
-  bookPages: BookPageItem[];
+  coupleId: string;
+  photos: MediaItem[];
+  activeBook: MemoryBook | null;
   autoOpenUpload?: boolean;
   onClearAutoOpen?: () => void;
   onPhotosChange: () => Promise<void>;
-  onPagesChange: (pages: BookPageItem[]) => void;
-  onSwitchToBook: (targetPageIndex?: number) => void;
+  onAddPhotoToBook: (photo: MediaItem) => Promise<void>;
+}
+
+interface UploadQueueItem {
+  localId: string;
+  file: File;
+  progress: number;
+  stage: string;
+  status: "uploading" | "done" | "error" | "cancelled";
+  error?: string;
+  controller: AbortController;
 }
 
 export default function PhotosView({
   coupleId,
   photos,
-  bookPages,
   autoOpenUpload = false,
   onClearAutoOpen,
   onPhotosChange,
-  onPagesChange,
-  onSwitchToBook,
+  onAddPhotoToBook,
 }: PhotosViewProps) {
+  const { storageBreakdown, refreshStorage } = useAuth();
   const fileInputRef = useRef<HTMLInputElement | null>(null);
 
-  const [selectedFile, setSelectedFile] = useState<File | null>(null);
-  const [previewObjectUrl, setPreviewObjectUrl] = useState<string | null>(null);
-  const [newTitle, setNewTitle] = useState("");
-  const [newDate, setNewDate] = useState(() => new Date().toISOString().slice(0, 10));
-  const [uploadProgress, setUploadProgress] = useState<number>(0);
-  const [uploadStage, setUploadStage] = useState<string>("");
-  const [isUploading, setIsUploading] = useState(false);
-  const [errorMessage, setErrorMessage] = useState<string | null>(null);
-  const [toastMessage, setToastMessage] = useState<string | null>(null);
+  const [thumbUrls, setThumbUrls] = useState<Record<string, string>>({});
+  const [lightboxPhoto, setLightboxPhoto] = useState<MediaItem | null>(null);
+  const [resolvedLightbox, setResolvedLightbox] = useState<{
+    mediaId: string;
+    url: string | null;
+  } | null>(null);
+  const lightboxFullUrl =
+    lightboxPhoto && resolvedLightbox?.mediaId === lightboxPhoto.id
+      ? resolvedLightbox.url
+      : null;
 
-  const [lightboxPhoto, setLightboxPhoto] = useState<PhotoItem | null>(null);
+  const [uploadQueue, setUploadQueue] = useState<UploadQueueItem[]>([]);
+  const [isDragging, setIsDragging] = useState(false);
+  const [searchQuery, setSearchQuery] = useState("");
+  const [sortBy, setSortBy] = useState<"newest" | "memory_date">("newest");
+
   const [editingPhotoId, setEditingPhotoId] = useState<string | null>(null);
   const [editTitle, setEditTitle] = useState("");
+  const [editDesc, setEditDesc] = useState("");
   const [editDate, setEditDate] = useState("");
+  const [toast, setToast] = useState<string | null>(null);
 
   useEffect(() => {
     if (autoOpenUpload) {
@@ -65,162 +84,218 @@ export default function PhotosView({
     }
   }, [autoOpenUpload, onClearAutoOpen]);
 
+  // Batch fetch private signed URLs for thumbnails (avoids N+1 storage calls)
   useEffect(() => {
-    return () => {
-      if (previewObjectUrl) {
-        URL.revokeObjectURL(previewObjectUrl);
+    let active = true;
+    const loadThumbs = async () => {
+      const thumbPaths: string[] = [];
+      const fallbackPaths: string[] = [];
+      for (const p of photos) {
+        if (p.thumbnail_path) thumbPaths.push(p.thumbnail_path);
+        else fallbackPaths.push(p.storage_path);
+      }
+
+      const [tMap, fMap] = await Promise.all([
+        thumbPaths.length > 0 ? getSignedUrlsBatch("thumbnails", thumbPaths) : {},
+        fallbackPaths.length > 0
+          ? getSignedUrlsBatch("couple-photos", fallbackPaths)
+          : {},
+      ]);
+      if (active) {
+        setThumbUrls({ ...fMap, ...tMap });
       }
     };
-  }, [previewObjectUrl]);
+    void loadThumbs();
+    return () => {
+      active = false;
+    };
+  }, [photos]);
+
+  // Resolve full-resolution signed URL on demand when lightbox opens
+  useEffect(() => {
+    if (!lightboxPhoto) return;
+    let active = true;
+    const targetId = lightboxPhoto.id;
+    const loadFull = async () => {
+      const full = await getSignedUrl("couple-photos", lightboxPhoto.storage_path);
+      if (active) setResolvedLightbox({ mediaId: targetId, url: full });
+    };
+    void loadFull();
+    return () => {
+      active = false;
+    };
+  }, [lightboxPhoto]);
 
   const showToast = (msg: string) => {
-    setToastMessage(msg);
-    setTimeout(() => {
-      setToastMessage((prev) => (prev === msg ? null : prev));
-    }, 3600);
+    setToast(msg);
+    setTimeout(() => setToast((prev) => (prev === msg ? null : prev)), 3600);
   };
 
-  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
+  const quotaRatio = storageBreakdown
+    ? storageBreakdown.total_used_bytes / Math.max(1, storageBreakdown.quota_bytes)
+    : 0;
+  const isQuotaFull = quotaRatio >= 1;
 
-    setErrorMessage(null);
-    const validation = validateImageFile(file);
-    if (!validation.valid) {
-      setErrorMessage(validation.error || "Geçersiz dosya.");
-      e.target.value = "";
-      return;
-    }
-
-    if (previewObjectUrl) {
-      URL.revokeObjectURL(previewObjectUrl);
-    }
-
-    const objUrl = URL.createObjectURL(file);
-    setSelectedFile(file);
-    setPreviewObjectUrl(objUrl);
-    setNewTitle(file.name.replace(/\.[^.]+$/, "") || "Yeni Fotoğraf");
-    setNewDate(new Date().toISOString().slice(0, 10));
-    e.target.value = "";
-  };
-
-  const cancelPreview = () => {
-    if (previewObjectUrl) {
-      URL.revokeObjectURL(previewObjectUrl);
-    }
-    setSelectedFile(null);
-    setPreviewObjectUrl(null);
-    setUploadProgress(0);
-    setUploadStage("");
-  };
-
-  const handleConfirmUpload = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!selectedFile) return;
-
-    setErrorMessage(null);
-    setIsUploading(true);
-    setUploadProgress(5);
-    setUploadStage("Hazırlanıyor...");
-
+  const runSingleUpload = async (item: UploadQueueItem) => {
     try {
-      const optimized = await optimizeImageToWebP(selectedFile, (pct, stage) => {
-        setUploadProgress(pct);
-        setUploadStage(stage);
+      await uploadCoupleMedia({
+        coupleId,
+        file: item.file,
+        mediaType: "photo",
+        title: item.file.name.replace(/\.[^.]+$/, ""),
+        memoryDate: new Date().toISOString().slice(0, 10),
+        signal: item.controller.signal,
+        onProgress: (pct, stage) => {
+          setUploadQueue((prev) =>
+            prev.map((q) =>
+              q.localId === item.localId ? { ...q, progress: pct, stage } : q
+            )
+          );
+        },
       });
 
-      const photoRecord: PhotoItem = {
-        id: `${coupleId}-photo-${Date.now()}`,
-        coupleId,
-        title: newTitle.trim() || "Anımız",
-        date: newDate || new Date().toISOString().slice(0, 10),
-        dataUrl: optimized.dataUrl,
-        mimeType: optimized.mimeType,
-        width: optimized.width,
-        height: optimized.height,
-        sizeBytes: optimized.sizeBytes,
-        createdAt: Date.now(),
-      };
-
-      await addCouplePhoto(photoRecord);
-      setUploadProgress(100);
-      setUploadStage("Tamamlandı");
-      await onPhotosChange();
-
-      const savedKB = Math.round(optimized.sizeBytes / 1024);
-      showToast(`"${photoRecord.title}" arşivlendi (${savedKB} KB WebP).`);
-      cancelPreview();
-    } catch (err) {
-      setErrorMessage(
-        err instanceof Error
-          ? err.message
-          : "Görsel optimize edilirken bir hata oluştu."
+      setUploadQueue((prev) =>
+        prev.map((q) =>
+          q.localId === item.localId
+            ? { ...q, progress: 100, stage: "Kaydedildi", status: "done" }
+            : q
+        )
       );
-    } finally {
-      setIsUploading(false);
+      await Promise.all([onPhotosChange(), refreshStorage()]);
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : "Yükleme başarısız.";
+      const cancelled = msg.includes("iptal");
+      setUploadQueue((prev) =>
+        prev.map((q) =>
+          q.localId === item.localId
+            ? {
+                ...q,
+                status: cancelled ? "cancelled" : "error",
+                error: msg,
+              }
+            : q
+        )
+      );
     }
   };
 
-  const handleStartEdit = (photo: PhotoItem) => {
-    setEditingPhotoId(photo.id);
-    setEditTitle(photo.title.replace(/\s*\([^)]*\)/g, ""));
-    setEditDate(photo.date);
+  const enqueueFiles = (files: FileList | File[]) => {
+    const fileArr = Array.from(files);
+    if (fileArr.length === 0) return;
+
+    const newItems: UploadQueueItem[] = fileArr.map((file, idx) => ({
+      localId: `${Date.now()}-${idx}-${file.name}`,
+      file,
+      progress: 5,
+      stage: "Sıraya alındı...",
+      status: "uploading",
+      controller: new AbortController(),
+    }));
+
+    setUploadQueue((prev) => [...newItems, ...prev]);
+
+    // Upload sequentially in small batches to keep main thread & quota smooth
+    void (async () => {
+      for (const item of newItems) {
+        await runSingleUpload(item);
+      }
+    })();
+  };
+
+  const handleRetryItem = (item: UploadQueueItem) => {
+    const refreshed: UploadQueueItem = {
+      ...item,
+      progress: 5,
+      stage: "Yeniden deneniyor...",
+      status: "uploading",
+      error: undefined,
+      controller: new AbortController(),
+    };
+    setUploadQueue((prev) =>
+      prev.map((q) => (q.localId === item.localId ? refreshed : q))
+    );
+    void runSingleUpload(refreshed);
+  };
+
+  const handleCancelItem = (localId: string) => {
+    setUploadQueue((prev) =>
+      prev.map((q) => {
+        if (q.localId === localId && q.status === "uploading") {
+          q.controller.abort();
+          return { ...q, status: "cancelled", stage: "İptal ediliyor..." };
+        }
+        return q;
+      })
+    );
   };
 
   const handleSaveEdit = async (photoId: string) => {
-    await updateCouplePhoto(coupleId, photoId, {
-      title: editTitle.trim() || "Anımız",
-      date: editDate,
-    });
+    const supabase = createClient();
+    const { error } = await supabase
+      .from("media")
+      .update({
+        title: editTitle.trim() || "Fotoğraf",
+        description: editDesc.trim() || null,
+        memory_date: editDate || null,
+      })
+      .eq("id", photoId);
+
+    if (error) {
+      showToast("Güncelleme başarısız: " + error.message);
+      return;
+    }
+
     setEditingPhotoId(null);
     await onPhotosChange();
     showToast("Fotoğraf bilgileri güncellendi.");
   };
 
-  const handleDeletePhoto = async (photo: PhotoItem) => {
-    await deleteCouplePhoto(coupleId, photo.id);
-    if (lightboxPhoto?.id === photo.id) {
-      setLightboxPhoto(null);
+  const handleDelete = async (photo: MediaItem) => {
+    try {
+      await deleteCoupleMedia(photo.id);
+      if (lightboxPhoto?.id === photo.id) setLightboxPhoto(null);
+      await Promise.all([onPhotosChange(), refreshStorage()]);
+      showToast(`"${photo.title || "Fotoğraf"}" kalıcı olarak silindi.`);
+    } catch (err) {
+      showToast(err instanceof Error ? err.message : "Silme işlemi başarısız.");
     }
-    await onPhotosChange();
-    showToast(`"${photo.title}" arşivden kaldırıldı.`);
   };
 
-  const handleSendToMemoryBook = async (photo: PhotoItem) => {
-    const newPageOrder = bookPages.length;
-    const formattedDate = photo.date
-      ? new Date(photo.date).toLocaleDateString("tr-TR", {
-          day: "numeric",
-          month: "long",
-          year: "numeric",
-        })
-      : "Özel Günümüz";
-
-    const newBookPage: BookPageItem = {
-      id: `${coupleId}-page-${Date.now()}`,
-      coupleId,
-      order: newPageOrder,
-      title: photo.title.replace(/\s*\([^)]*\)/g, "") || "Bizim Hikayemiz",
-      date: formattedDate,
-      content: "Seninle tanıştığım o günü hiçbir zaman unutmayacağım.",
-      photoUrl: photo.dataUrl,
-      layoutVariant: "polaroid-standard",
-      updatedAt: Date.now(),
-    };
-
-    await saveCoupleBookPage(newBookPage);
-    const updatedPages = [...bookPages, newBookPage];
-    onPagesChange(updatedPages);
-    showToast(
-      `"${newBookPage.title}" Anı Kitabı'na Sayfa ${newPageOrder + 1} olarak eklendi.`
-    );
-    onSwitchToBook(newPageOrder);
-  };
+  const filteredPhotos = photos
+    .filter((p) => {
+      const q = searchQuery.trim().toLowerCase();
+      if (!q) return true;
+      return (
+        (p.title || "").toLowerCase().includes(q) ||
+        (p.description || "").toLowerCase().includes(q) ||
+        (p.memory_date || "").includes(q)
+      );
+    })
+    .sort((a, b) => {
+      if (sortBy === "memory_date") {
+        return (b.memory_date || "").localeCompare(a.memory_date || "");
+      }
+      return b.created_at.localeCompare(a.created_at);
+    });
 
   return (
-    <section className="mx-auto max-w-[1360px] px-4 sm:px-6 lg:px-10 py-8 pb-28">
+    <section
+      onDragOver={(e) => {
+        e.preventDefault();
+        setIsDragging(true);
+      }}
+      onDragLeave={() => setIsDragging(false)}
+      onDrop={(e) => {
+        e.preventDefault();
+        setIsDragging(false);
+        if (!isQuotaFull && e.dataTransfer.files?.length) {
+          enqueueFiles(e.dataTransfer.files);
+        }
+      }}
+      className="mx-auto max-w-[1360px] px-4 sm:px-6 lg:px-10 py-8 pb-28"
+    >
       {/* Archival Header */}
-      <div className="flex flex-col sm:flex-row sm:items-end justify-between gap-4 border-b border-[#343438]/70 pb-6">
+      <div className="flex flex-col md:flex-row md:items-end justify-between gap-4 border-b border-[#343438]/70 pb-6">
         <div>
           <div className="flex items-baseline gap-3">
             <h1 className="text-[28px] sm:text-[36px] font-semibold tracking-[-0.025em] text-[#F5F5F7]">
@@ -231,22 +306,48 @@ export default function PhotosView({
             </span>
           </div>
           <p className="mt-1 text-[14px] text-[#A1A1A6]">
-            Yüklenen görseller otomatik olarak WebP formatına optimize edilir ve yerel arşivinizde saklanır.
+            Görseller EXIF konum bilgileri temizlenerek WebP formatına optimize edilir ve yalnızca ikinize özel depolanır.
           </p>
         </div>
 
-        <div className="flex items-center gap-3">
+        <div className="flex flex-wrap items-center gap-3">
+          <div className="relative">
+            <Search className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-[#A1A1A6]" />
+            <input
+              type="text"
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              placeholder="Fotoğraflarda ara..."
+              className="rounded-lg border border-[#343438] bg-[#18181B] pl-8 pr-3 py-2 text-[13px] text-[#F5F5F7] placeholder-[#A1A1A6]/60 focus:border-[#D88A96] focus:outline-none w-44 sm:w-52"
+            />
+          </div>
+
+          <select
+            value={sortBy}
+            onChange={(e) => setSortBy(e.target.value as "newest" | "memory_date")}
+            aria-label="Sıralama"
+            className="rounded-lg border border-[#343438] bg-[#18181B] px-3 py-2 text-[13px] text-[#F5F5F7] focus:border-[#D88A96] focus:outline-none"
+          >
+            <option value="newest">Son Yüklenenler</option>
+            <option value="memory_date">Anı Tarihine Göre</option>
+          </select>
+
           <input
             ref={fileInputRef}
             type="file"
+            multiple
             accept=".jpg,.jpeg,.png,.webp,.heic,.heif,image/*"
-            onChange={handleFileChange}
+            onChange={(e) => {
+              if (e.target.files) enqueueFiles(e.target.files);
+              e.target.value = "";
+            }}
             className="hidden"
           />
           <button
             type="button"
+            disabled={isQuotaFull}
             onClick={() => fileInputRef.current?.click()}
-            className="inline-flex items-center gap-2 rounded-lg bg-[#F5F5F7] hover:bg-white active:scale-[0.99] px-4 py-2.5 text-[13px] font-medium text-[#101012] transition-apple cursor-pointer"
+            className="inline-flex items-center gap-2 rounded-lg bg-[#F5F5F7] hover:bg-white active:scale-[0.99] px-4 py-2 text-[13px] font-medium text-[#101012] transition-apple cursor-pointer disabled:opacity-40"
           >
             <Upload className="h-4 w-4" />
             <span>Fotoğraf Yükle</span>
@@ -254,35 +355,39 @@ export default function PhotosView({
         </div>
       </div>
 
-      {/* Feedback Banner */}
-      {errorMessage && (
-        <div
-          role="alert"
-          className="mt-5 flex items-center justify-between rounded-lg border border-[#D88A96]/40 bg-[#18181B] px-4 py-3 text-[13px] text-[#F5F5F7]"
-        >
-          <div className="flex items-center gap-2.5">
-            <AlertCircle className="h-4 w-4 text-[#D88A96] shrink-0" />
-            <span>{errorMessage}</span>
-          </div>
-          <button
-            type="button"
-            onClick={() => setErrorMessage(null)}
-            className="text-[#A1A1A6] hover:text-[#F5F5F7]"
-          >
-            <X className="h-4 w-4" />
-          </button>
+      {/* Quota Warning (>= 80%) */}
+      {quotaRatio >= 0.8 && storageBreakdown && (
+        <div className="mt-5 flex items-center gap-2.5 rounded-lg border border-[#D88A96]/40 bg-[#18181B] px-4 py-3 text-[13px] text-[#F5F5F7]">
+          <AlertCircle className="h-4 w-4 text-[#D88A96] shrink-0" />
+          <span>
+            {isQuotaFull
+              ? "Depolama kotanız doldu. Yeni yükleme yapabilmek için eski medyaları silerek alan açın."
+              : `Depolama kotanızın %${Math.round(quotaRatio * 100)} seviyesine ulaştınız (${formatBytes(
+                  storageBreakdown.total_used_bytes
+                )} / ${formatBytes(storageBreakdown.quota_bytes)}).`}
+          </span>
         </div>
       )}
 
-      {toastMessage && (
+      {/* Drag & Drop Active Indicator */}
+      {isDragging && (
+        <div className="mt-5 rounded-xl border-2 border-dashed border-[#D88A96] bg-[#18181B] p-8 text-center">
+          <p className="text-[15px] font-medium text-[#F5F5F7]">
+            Fotoğrafları yüklemek için buraya bırakın
+          </p>
+        </div>
+      )}
+
+      {/* Toast */}
+      {toast && (
         <div className="mt-5 flex items-center justify-between rounded-lg border border-[#343438] bg-[#18181B] px-4 py-3 text-[13px] text-[#F5F5F7]">
           <div className="flex items-center gap-2">
-            <Check className="h-4 w-4 text-[#D88A96] shrink-0" />
-            <span>{toastMessage}</span>
+            <Check className="h-4 w-4 text-[#D88A96]" />
+            <span>{toast}</span>
           </div>
           <button
             type="button"
-            onClick={() => setToastMessage(null)}
+            onClick={() => setToast(null)}
             className="text-[#A1A1A6] hover:text-[#F5F5F7]"
           >
             <X className="h-4 w-4" />
@@ -290,221 +395,222 @@ export default function PhotosView({
         </div>
       )}
 
-      {/* Upload Preview Sheet */}
-      {selectedFile && previewObjectUrl && (
-        <form
-          onSubmit={handleConfirmUpload}
-          className="mt-6 rounded-xl border border-[#343438] bg-[#18181B] p-6"
-        >
-          <div className="flex items-center justify-between mb-4">
-            <h2 className="text-[16px] font-semibold text-[#F5F5F7]">
-              Yeni Fotoğraf Ekle
-            </h2>
+      {/* Active Upload Queue */}
+      {uploadQueue.length > 0 && (
+        <div className="mt-5 rounded-xl border border-[#343438] bg-[#18181B] p-4 space-y-3">
+          <div className="flex items-center justify-between">
+            <span className="text-[13px] font-medium text-[#F5F5F7]">
+              Yükleme Kuyruğu ({uploadQueue.length})
+            </span>
             <button
               type="button"
-              onClick={cancelPreview}
-              disabled={isUploading}
-              className="text-[#A1A1A6] hover:text-[#F5F5F7] cursor-pointer"
+              onClick={() =>
+                setUploadQueue((prev) => prev.filter((q) => q.status === "uploading"))
+              }
+              className="text-[12px] text-[#A1A1A6] hover:text-[#F5F5F7] cursor-pointer"
             >
-              <X className="h-4 w-4" />
+              Tamamlananları Temizle
             </button>
           </div>
 
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-6 items-center">
-            <div className="relative aspect-[4/3] w-full overflow-hidden rounded-lg border border-[#343438] bg-[#101012]">
-              <img
-                src={previewObjectUrl}
-                alt="Önizleme"
-                className="h-full w-full object-contain"
-              />
-              <span className="absolute bottom-2 right-2 rounded bg-[#101012]/80 px-2 py-0.5 text-[11px] text-[#A1A1A6]">
-                {(selectedFile.size / 1024).toFixed(0)} KB
-              </span>
-            </div>
-
-            <div className="md:col-span-2 space-y-4">
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-[12px] font-medium text-[#A1A1A6] mb-1.5">
-                    Başlık
-                  </label>
-                  <input
-                    type="text"
-                    value={newTitle}
-                    onChange={(e) => setNewTitle(e.target.value)}
-                    placeholder="Gün Batımında Biz"
-                    className="w-full rounded-lg border border-[#343438] bg-[#101012] px-3.5 py-2 text-[14px] text-[#F5F5F7] focus:border-[#D88A96] focus:outline-none"
-                  />
-                </div>
-
-                <div>
-                  <label className="block text-[12px] font-medium text-[#A1A1A6] mb-1.5">
-                    Tarih
-                  </label>
-                  <input
-                    type="date"
-                    value={newDate}
-                    onChange={(e) => setNewDate(e.target.value)}
-                    className="w-full rounded-lg border border-[#343438] bg-[#101012] px-3.5 py-2 text-[14px] text-[#F5F5F7] focus:border-[#D88A96] focus:outline-none"
-                  />
-                </div>
-              </div>
-
-              {isUploading && (
-                <div className="space-y-1.5">
-                  <div className="flex items-center justify-between text-[12px] text-[#A1A1A6]">
-                    <span>{uploadStage}</span>
-                    <span>%{uploadProgress}</span>
-                  </div>
-                  <div className="h-1.5 w-full overflow-hidden rounded-full bg-[#222226]">
-                    <div
-                      className="h-full rounded-full bg-[#D88A96] transition-all duration-150"
-                      style={{ width: `${uploadProgress}%` }}
-                    />
-                  </div>
-                </div>
-              )}
-
-              <div className="flex items-center justify-end gap-2.5 pt-2">
-                <button
-                  type="button"
-                  onClick={cancelPreview}
-                  disabled={isUploading}
-                  className="rounded-lg border border-[#343438] bg-[#101012] hover:bg-[#222226] px-4 py-2 text-[13px] font-medium text-[#F5F5F7] cursor-pointer"
-                >
-                  Vazgeç
-                </button>
-                <button
-                  type="submit"
-                  disabled={isUploading}
-                  className="inline-flex items-center gap-2 rounded-lg bg-[#F5F5F7] hover:bg-white px-5 py-2 text-[13px] font-medium text-[#101012] cursor-pointer disabled:opacity-50"
-                >
-                  <Check className="h-4 w-4" />
-                  <span>{isUploading ? "Kaydediliyor..." : "Arşive Kaydet"}</span>
-                </button>
-              </div>
-            </div>
-          </div>
-        </form>
-      )}
-
-      {/* Apple Photos-Style Consistent Archival Grid */}
-      <div className="mt-8 grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-6">
-        {photos.map((photo) => {
-          const isEditing = editingPhotoId === photo.id;
-          const cleanPhotoTitle = photo.title.replace(/\s*\([^)]*\)/g, "");
-
-          return (
-            <div key={photo.id} className="group flex flex-col">
-              {/* Thumbnail Frame */}
-              <div
-                onClick={() => setLightboxPhoto(photo)}
-                className="relative aspect-[4/3] w-full overflow-hidden rounded-xl border border-[#343438]/70 bg-[#18181B] cursor-pointer"
-              >
-                <img
-                  src={photo.dataUrl}
-                  alt={cleanPhotoTitle}
-                  loading="lazy"
-                  className="h-full w-full object-cover transition-transform duration-200 group-hover:scale-[1.02]"
-                />
-
-                {/* Subtle Hover Action Bar */}
-                <div className="absolute inset-0 bg-gradient-to-t from-black/70 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-150 flex items-end justify-between p-3">
-                  <span className="inline-flex items-center gap-1.5 rounded-md bg-[#101012]/80 px-2.5 py-1 text-[11px] font-medium text-[#F5F5F7]">
-                    <Maximize2 className="h-3 w-3" />
-                    Görüntüle
+          {uploadQueue.map((item) => (
+            <div
+              key={item.localId}
+              className="rounded-lg border border-[#343438]/70 bg-[#101012] p-3"
+            >
+              <div className="flex items-center justify-between gap-3 text-[12px]">
+                <span className="font-medium text-[#F5F5F7] truncate">
+                  {item.file.name}
+                </span>
+                <div className="flex items-center gap-2 shrink-0">
+                  <span className="text-[#A1A1A6]">
+                    {item.status === "error"
+                      ? item.error
+                      : `${item.stage} (%${item.progress})`}
                   </span>
-
-                  <div
-                    onClick={(e) => e.stopPropagation()}
-                    className="flex items-center gap-1.5"
-                  >
+                  {item.status === "uploading" && (
                     <button
                       type="button"
-                      onClick={() => void handleSendToMemoryBook(photo)}
-                      title="Anı Kitabına Ekle"
-                      className="rounded-md bg-[#101012]/85 hover:bg-[#F5F5F7] p-1.5 text-[#F5F5F7] hover:text-[#101012] transition-apple cursor-pointer"
-                    >
-                      <BookOpen className="h-3.5 w-3.5" />
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => handleStartEdit(photo)}
-                      title="Düzenle"
-                      className="rounded-md bg-[#101012]/85 hover:bg-[#F5F5F7] p-1.5 text-[#F5F5F7] hover:text-[#101012] transition-apple cursor-pointer"
-                    >
-                      <Edit3 className="h-3.5 w-3.5" />
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => void handleDeletePhoto(photo)}
-                      title="Sil"
-                      className="rounded-md bg-[#101012]/85 hover:bg-[#D88A96] p-1.5 text-[#F5F5F7] hover:text-[#101012] transition-apple cursor-pointer"
-                    >
-                      <Trash2 className="h-3.5 w-3.5" />
-                    </button>
-                  </div>
-                </div>
-              </div>
-
-              {/* Minimal Metadata Below Image */}
-              {isEditing ? (
-                <div className="mt-2.5 space-y-2 rounded-lg border border-[#343438] bg-[#18181B] p-3">
-                  <input
-                    type="text"
-                    value={editTitle}
-                    onChange={(e) => setEditTitle(e.target.value)}
-                    className="w-full rounded border border-[#343438] bg-[#101012] px-2.5 py-1.5 text-[13px] text-[#F5F5F7] focus:border-[#D88A96] focus:outline-none"
-                  />
-                  <input
-                    type="date"
-                    value={editDate}
-                    onChange={(e) => setEditDate(e.target.value)}
-                    className="w-full rounded border border-[#343438] bg-[#101012] px-2.5 py-1.5 text-[12px] text-[#F5F5F7] focus:border-[#D88A96] focus:outline-none"
-                  />
-                  <div className="flex items-center justify-end gap-1.5 pt-1">
-                    <button
-                      type="button"
-                      onClick={() => setEditingPhotoId(null)}
-                      className="rounded px-2.5 py-1 text-[12px] text-[#A1A1A6] hover:text-[#F5F5F7] cursor-pointer"
+                      onClick={() => handleCancelItem(item.localId)}
+                      className="text-[#D88A96] hover:underline cursor-pointer"
                     >
                       İptal
                     </button>
+                  )}
+                  {(item.status === "error" || item.status === "cancelled") && (
                     <button
                       type="button"
-                      onClick={() => void handleSaveEdit(photo.id)}
-                      className="rounded bg-[#F5F5F7] px-2.5 py-1 text-[12px] font-medium text-[#101012] cursor-pointer"
+                      onClick={() => handleRetryItem(item)}
+                      className="inline-flex items-center gap-1 text-[#F5F5F7] hover:text-[#D88A96] cursor-pointer"
                     >
-                      Kaydet
+                      <RefreshCw className="h-3 w-3" />
+                      <span>Yeniden Dene</span>
+                    </button>
+                  )}
+                </div>
+              </div>
+              <div className="mt-2 h-1 w-full overflow-hidden rounded-full bg-[#222226]">
+                <div
+                  className={`h-full rounded-full transition-all duration-150 ${
+                    item.status === "error" ? "bg-rose-500" : "bg-[#D88A96]"
+                  }`}
+                  style={{ width: `${item.progress}%` }}
+                />
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {/* Gallery Grid or Clean Empty State */}
+      {filteredPhotos.length === 0 ? (
+        <div className="mt-10 rounded-2xl border border-[#343438]/70 bg-[#18181B] px-6 py-16 text-center">
+          <p className="text-[18px] font-medium text-[#F5F5F7]">
+            {searchQuery
+              ? "Aramanızla eşleşen fotoğraf bulunamadı."
+              : "Henüz fotoğraf eklemediniz."}
+          </p>
+          <p className="mt-1.5 text-[14px] text-[#A1A1A6]">
+            {searchQuery
+              ? "Farklı bir anahtar kelime deneyin."
+              : "Fotoğraflarınızı buraya sürükleyip bırakabilir veya yukarıdaki butondan çoklu yükleme yapabilirsiniz."}
+          </p>
+        </div>
+      ) : (
+        <div className="mt-8 grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-6">
+          {filteredPhotos.map((photo) => {
+            const isEditing = editingPhotoId === photo.id;
+            const thumb =
+              (photo.thumbnail_path && thumbUrls[photo.thumbnail_path]) ||
+              thumbUrls[photo.storage_path];
+
+            return (
+              <div key={photo.id} className="group flex flex-col">
+                <div
+                  onClick={() => setLightboxPhoto(photo)}
+                  className="relative aspect-[4/3] w-full overflow-hidden rounded-xl border border-[#343438]/70 bg-[#18181B] cursor-pointer"
+                >
+                  {thumb ? (
+                    <img
+                      src={thumb}
+                      alt={photo.title || "Fotoğraf"}
+                      loading="lazy"
+                      className="h-full w-full object-cover transition-transform duration-200 group-hover:scale-[1.02]"
+                    />
+                  ) : (
+                    <div className="h-full w-full animate-pulse bg-[#222226]" />
+                  )}
+
+                  <div className="absolute inset-0 bg-gradient-to-t from-black/75 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-150 flex items-end justify-between p-3">
+                    <span className="inline-flex items-center gap-1.5 rounded-md bg-[#101012]/80 px-2.5 py-1 text-[11px] font-medium text-[#F5F5F7]">
+                      <Maximize2 className="h-3 w-3" />
+                      Büyüt
+                    </span>
+
+                    <div
+                      onClick={(e) => e.stopPropagation()}
+                      className="flex items-center gap-1.5"
+                    >
+                      <button
+                        type="button"
+                        onClick={() => void onAddPhotoToBook(photo)}
+                        title="Anı Kitabına Ekle"
+                        className="rounded-md bg-[#101012]/85 hover:bg-[#F5F5F7] p-1.5 text-[#F5F5F7] hover:text-[#101012] transition-apple cursor-pointer"
+                      >
+                        <BookOpen className="h-3.5 w-3.5" />
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setEditingPhotoId(photo.id);
+                          setEditTitle(photo.title || "");
+                          setEditDesc(photo.description || "");
+                          setEditDate(photo.memory_date || "");
+                        }}
+                        title="Düzenle"
+                        className="rounded-md bg-[#101012]/85 hover:bg-[#F5F5F7] p-1.5 text-[#F5F5F7] hover:text-[#101012] transition-apple cursor-pointer"
+                      >
+                        <Edit3 className="h-3.5 w-3.5" />
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => void handleDelete(photo)}
+                        title="Sil"
+                        className="rounded-md bg-[#101012]/85 hover:bg-[#D88A96] p-1.5 text-[#F5F5F7] hover:text-[#101012] transition-apple cursor-pointer"
+                      >
+                        <Trash2 className="h-3.5 w-3.5" />
+                      </button>
+                    </div>
+                  </div>
+                </div>
+
+                {isEditing ? (
+                  <div className="mt-2.5 space-y-2 rounded-lg border border-[#343438] bg-[#18181B] p-3">
+                    <input
+                      type="text"
+                      value={editTitle}
+                      onChange={(e) => setEditTitle(e.target.value)}
+                      placeholder="Başlık"
+                      className="w-full rounded border border-[#343438] bg-[#101012] px-2.5 py-1.5 text-[13px] text-[#F5F5F7] focus:border-[#D88A96] focus:outline-none"
+                    />
+                    <input
+                      type="text"
+                      value={editDesc}
+                      onChange={(e) => setEditDesc(e.target.value)}
+                      placeholder="Açıklama (isteğe bağlı)"
+                      className="w-full rounded border border-[#343438] bg-[#101012] px-2.5 py-1.5 text-[12px] text-[#F5F5F7] focus:border-[#D88A96] focus:outline-none"
+                    />
+                    <input
+                      type="date"
+                      value={editDate}
+                      onChange={(e) => setEditDate(e.target.value)}
+                      className="w-full rounded border border-[#343438] bg-[#101012] px-2.5 py-1.5 text-[12px] text-[#F5F5F7] focus:border-[#D88A96] focus:outline-none"
+                    />
+                    <div className="flex items-center justify-end gap-1.5 pt-1">
+                      <button
+                        type="button"
+                        onClick={() => setEditingPhotoId(null)}
+                        className="rounded px-2.5 py-1 text-[12px] text-[#A1A1A6] hover:text-[#F5F5F7] cursor-pointer"
+                      >
+                        İptal
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => void handleSaveEdit(photo.id)}
+                        className="rounded bg-[#F5F5F7] px-2.5 py-1 text-[12px] font-medium text-[#101012] cursor-pointer"
+                      >
+                        Kaydet
+                      </button>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="mt-2.5 flex items-baseline justify-between gap-2">
+                    <div className="min-w-0">
+                      <h3 className="text-[15px] font-medium text-[#F5F5F7] truncate">
+                        {photo.title || "Fotoğraf"}
+                      </h3>
+                      <p className="text-[12px] text-[#A1A1A6] tabular-nums mt-0.5 truncate">
+                        {photo.memory_date || photo.created_at.slice(0, 10)}
+                        {photo.description ? ` • ${photo.description}` : ""}
+                      </p>
+                    </div>
+
+                    <button
+                      type="button"
+                      onClick={() => void onAddPhotoToBook(photo)}
+                      className="text-[12px] font-medium text-[#A1A1A6] hover:text-[#D88A96] shrink-0 transition-apple cursor-pointer"
+                    >
+                      Kitaba Ekle
                     </button>
                   </div>
-                </div>
-              ) : (
-                <div className="mt-2.5 flex items-baseline justify-between gap-2">
-                  <div className="min-w-0">
-                    <h3 className="text-[15px] font-medium text-[#F5F5F7] truncate">
-                      {cleanPhotoTitle}
-                    </h3>
-                    <p className="text-[12px] text-[#A1A1A6] tabular-nums mt-0.5">
-                      {photo.date}
-                    </p>
-                  </div>
+                )}
+              </div>
+            );
+          })}
+        </div>
+      )}
 
-                  <button
-                    type="button"
-                    onClick={() => void handleSendToMemoryBook(photo)}
-                    className="text-[12px] font-medium text-[#A1A1A6] hover:text-[#D88A96] shrink-0 transition-apple cursor-pointer"
-                  >
-                    Kitaba Ekle
-                  </button>
-                </div>
-              )}
-            </div>
-          );
-        })}
-      </div>
-
-      {/* Fullscreen Darkroom Lightbox Viewer */}
+      {/* Fullscreen Lightbox */}
       {lightboxPhoto && (
         <div
           onClick={() => setLightboxPhoto(null)}
@@ -516,16 +622,19 @@ export default function PhotosView({
           >
             <div>
               <h3 className="text-[16px] font-semibold text-[#F5F5F7]">
-                {lightboxPhoto.title.replace(/\s*\([^)]*\)/g, "")}
+                {lightboxPhoto.title || "Fotoğraf"}
               </h3>
-              <p className="text-[12px] text-[#A1A1A6]">{lightboxPhoto.date}</p>
+              <p className="text-[12px] text-[#A1A1A6]">
+                {lightboxPhoto.memory_date || lightboxPhoto.created_at.slice(0, 10)}
+                {lightboxPhoto.description ? ` — ${lightboxPhoto.description}` : ""}
+              </p>
             </div>
 
             <div className="flex items-center gap-2.5">
               <button
                 type="button"
                 onClick={() => {
-                  void handleSendToMemoryBook(lightboxPhoto);
+                  void onAddPhotoToBook(lightboxPhoto);
                   setLightboxPhoto(null);
                 }}
                 className="inline-flex items-center gap-1.5 rounded-lg bg-[#F5F5F7] hover:bg-white px-3.5 py-1.5 text-[12px] font-medium text-[#101012] cursor-pointer"
@@ -548,16 +657,22 @@ export default function PhotosView({
             onClick={(e) => e.stopPropagation()}
             className="my-auto flex items-center justify-center overflow-hidden py-4"
           >
-            <img
-              src={lightboxPhoto.dataUrl}
-              alt={lightboxPhoto.title}
-              className="max-h-[76vh] w-auto rounded-lg object-contain shadow-2xl"
-            />
+            {lightboxFullUrl ? (
+              <img
+                src={lightboxFullUrl}
+                alt={lightboxPhoto.title || "Fotoğraf"}
+                className="max-h-[76vh] w-auto rounded-lg object-contain shadow-2xl"
+              />
+            ) : (
+              <div className="h-10 w-10 animate-spin rounded-full border-2 border-[#D88A96] border-t-transparent" />
+            )}
           </div>
 
           <div className="text-center text-[12px] text-[#A1A1A6]">
-            {lightboxPhoto.width} × {lightboxPhoto.height} px •{" "}
-            {Math.round(lightboxPhoto.sizeBytes / 1024)} KB
+            {lightboxPhoto.width && lightboxPhoto.height
+              ? `${lightboxPhoto.width} × ${lightboxPhoto.height} px • `
+              : ""}
+            {formatBytes(lightboxPhoto.file_size)}
           </div>
         </div>
       )}
